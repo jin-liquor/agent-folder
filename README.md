@@ -1,159 +1,157 @@
 # Agent Folder
 
-把「找到文件夹 → 在编辑器里打开」变成一两次按键的 Windows 桌面工具。
+[English](#english) | [简体中文](#简体中文)
 
-常驻系统托盘，`Ctrl+Alt+V` 随时呼出；记住你打开过的项目，支持模糊搜索、磁盘扫描、标签与颜色标记，一键在 VS Code / Cursor / Windsurf 中打开。
+## 简体中文
 
----
+Agent Folder 是一个面向 Windows 的轻量级桌面工具，用于管理常用文件夹，并快速在代码编辑器或资源管理器中打开。
 
-## 功能
+### 功能
 
-| 功能 | 说明 |
-|---|---|
-| 快速搜索 | 模糊匹配名称、路径与标签；`Ctrl+K` 聚焦搜索框 |
-| 历史记录 | 自动记录每次打开，按最近使用排序，上限 500 条（收藏永不清理） |
-| 收藏 | 置顶显示，`Ctrl+D` 切换 |
-| 磁盘扫描 | 在指定目录下按名称查找文件夹，结果可直接打开 |
-| 多编辑器 | 自动探测 VS Code、VS Code Insiders、Cursor、Windsurf |
-| 项目识别 | 根据标记文件显示 Tauri / Rust / Node / Python / Go 等徽标 |
-| 标签与颜色 | 自由打标签参与搜索；颜色仅影响界面，不改动磁盘 |
-| 系统托盘 | 关闭或最小化到托盘，托盘菜单可直接打开最近项目 |
-| 快速启动浮窗 | `Ctrl+Shift+Space` 呼出类 Spotlight 的搜索浮窗，回车即打开 |
-| 全局快捷键 | 默认 `Ctrl+Alt+V`，可在设置中录制修改 |
-| 失效检测 | 目录被改名或删除时标记「路径失效」，支持批量清理 |
-| 数据备份 | 导出为 JSON；导入按路径合并，不覆盖已有记录 |
+- 收藏常用文件夹，并按最近使用情况排序
+- 按名称、路径和标签进行模糊搜索
+- 浏览目录树，或扫描配置的目录范围查找项目
+- 使用 VS Code、VS Code Insiders、Cursor、Windsurf 或资源管理器打开文件夹
+- 为项目添加标签和颜色，并识别常见项目类型
+- 使用系统托盘、全局快捷键和快速启动浮窗
+- 导入、导出本地 JSON 数据；每个用户最多保留 500 条历史记录，收藏不会因历史裁剪而删除
 
----
+### 安装
 
-## 使用
+从 [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases) 下载最新的 `*_x64-setup.exe`，运行安装程序即可。
 
-### 第一次启动
+系统要求：Windows 10 或更高版本，以及 Microsoft Edge WebView2 Runtime（Windows 11 通常已预装）。建议安装后从开始菜单启动应用。不要直接从受低完整性权限限制的工作目录运行构建产物，否则 Windows 可能阻止系统托盘图标注册。
 
-应用会出现在系统托盘（可能在折叠区，点任务栏的 `^` 展开）。
+### 快速开始
 
-1. 点「添加文件夹」选择项目目录，或
-2. 打开「磁盘扫描」，输入关键词自动搜索
+1. 启动 Agent Folder。
+2. 选择「添加文件夹」浏览磁盘，或使用「磁盘扫描」搜索项目。
+3. 选择项目并按 `Enter`，使用当前默认编辑器打开。
+4. 将常用目录加入收藏，之后可在主窗口或快速启动浮窗中搜索。
 
-选中条目按 `Enter` 即可在编辑器中打开。
-
-### 添加文件夹的两种方式
-
-点「添加文件夹」后会弹出选择窗口，内置一棵可展开的目录树：
-
-- **浏览磁盘**：从磁盘根节点逐层展开，点击目录名即可添加。
-  适合不记得具体路径、需要边看边找的情况。
-- **用系统对话框选择**：调用 Windows 原生选择框，支持粘贴路径。
-  适合已经知道路径的情况。
-
-目录树是懒加载的：只有展开某个节点时才读取它的子目录，
-因此打开磁盘根节点不会扫描整个磁盘。
+如果项目不在默认扫描范围内，请在「设置 → 磁盘扫描范围」添加对应目录。添加记录、收藏或设置不会移动、修改或删除磁盘上的项目文件。
 
 ### 快捷键
 
-| 按键 | 作用 |
+| 快捷键 | 操作 |
 |---|---|
 | `Ctrl+K` | 聚焦搜索框 |
-| `↑` `↓` | 选择条目 |
-| `Enter` | 在编辑器中打开 |
-| `Ctrl+D` | 收藏 / 取消收藏 |
-| `Delete` | 移除记录（不会删除磁盘文件夹） |
+| `↑` / `↓` | 选择列表项 |
+| `Enter` | 打开选中项目 |
+| `Ctrl+D` | 收藏或取消收藏 |
+| `Delete` | 移除记录，不删除实际文件夹 |
 | `Ctrl+,` | 打开设置 |
-| `Esc` | 关闭设置面板 / 清空搜索 |
-| `Ctrl+Alt+V` | 全局呼出 / 隐藏窗口（可改） |
-| `Ctrl+Shift+Space` | 全局呼出快速启动浮窗 |
+| `Esc` | 关闭面板或清空搜索 |
+| `Ctrl+Alt+V` | 显示或隐藏主窗口，可在设置中更改 |
+| `Ctrl+Shift+Space` | 显示或隐藏快速启动浮窗 |
 
-### 关闭与最小化
+点击标题栏的最小化按钮会隐藏到托盘。关闭按钮的行为由「关闭时最小化到托盘」设置决定。完全退出请右键托盘图标并选择「退出」。
 
-- **标题栏的 `—`**：立即隐藏到托盘
-- **标题栏的 `✕`**：行为取决于设置项「关闭时最小化到托盘」
-  - 开启（默认）：隐藏到托盘，程序继续运行
-  - 关闭：真正退出程序
+### 隐私与数据
 
-想彻底退出，请用**托盘图标右键 → 退出**。
+Agent Folder 将文件夹记录和设置保存在本机：`%APPDATA%\agent-folder\data.json`。应用不上传这些数据，也不收集使用统计。JSON 导入和导出由用户主动操作。项目当前不包含自动更新器；新版本通过 GitHub Releases 手动下载并安装。
 
-### 快速启动浮窗
+### 从源码构建
 
-按 `Ctrl+Shift+Space` 在任何位置呼出一个小窗口：输入即搜，`↑` `↓` 选择，`Enter` 打开，`Esc` 关闭。
+需要 Node.js、pnpm、Rust 工具链和 Windows WebView2 Runtime。
 
-适合「只想打开某个项目」的场景，不用先切回主窗口。
+```powershell
+pnpm install
+pnpm build
+pnpm test
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --manifest-path src-tauri/Cargo.toml --release --offline
+$env:CI = "true"
+pnpm tauri build
+```
 
-> 浮窗快捷键固定为 `Ctrl+Shift+Space`，不占用设置里的自定义项。
-> 未使用 `Ctrl+Alt+Space` 是因为该组合常被输入法切换占用，注册会失败。
+安装包位于 `src-tauri/target/release/bundle/nsis/`。
 
-### 磁盘扫描找不到项目？
+### 开发文档
 
-扫描范围默认是用户主目录。如果项目在 D 盘等位置，到 **设置 → 磁盘扫描范围** 把对应目录加进去。
+- [项目结构](STRUCTURE.md)
+- [贡献指南](CONTRIBUTING.md)
+- [开发计划](PLAN.md)
+- [版本记录](CHANGELOG.md)
+
+### 许可
+
+[MIT License](LICENSE)
 
 ---
 
-## 安装
+## English
 
-下载 `Agent Folder_x.y.z_x64-setup.exe` 运行即可。安装包约 2 MB。
+Agent Folder is a lightweight Windows desktop app for organizing frequently used folders and opening them quickly in a code editor or File Explorer.
 
-系统要求：Windows 10 及以上，需要 WebView2 运行时（Windows 11 已内置）。
+### Features
 
-> 如果从带「低完整性」标签的目录直接运行 exe，托盘图标会因权限不足注册失败
-> （Windows 返回错误 5）。这是系统限制而非程序缺陷，正常安装不会有此问题。
+- Pin favorite folders and sort by recent usage
+- Fuzzy search by folder name, path, and tags
+- Browse the directory tree or scan configured roots for projects
+- Open folders with VS Code, VS Code Insiders, Cursor, Windsurf, or File Explorer
+- Add tags and colors; identify common project types
+- Stay in the system tray, use global shortcuts, and open the quick-launch palette
+- Import and export local JSON data; history is capped at 500 records while favorites are preserved
 
----
+### Installation
 
-## 数据与隐私
+Download the latest `*_x64-setup.exe` from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases) and run the installer.
 
-所有数据保存在本机：
+Requirements: Windows 10 or later and the Microsoft Edge WebView2 Runtime (usually preinstalled on Windows 11). Launch the installed app from the Start menu. Avoid running a built executable directly from a working directory with a low-integrity security label, as Windows may block system-tray icon registration.
 
-```
-%APPDATA%\agent-folder\data.json
-```
+### Quick start
 
-包含文件夹记录与设置，不含任何使用统计，不联网。
+1. Launch Agent Folder.
+2. Choose **Add Folder** to browse, or use **Disk Scan** to search for a project.
+3. Select a project and press `Enter` to open it with the current default editor.
+4. Favorite frequently used folders and search them later from the main window or quick-launch palette.
 
-- 文件损坏时会自动备份为 `data.corrupt-<时间戳>.json` 并回退空状态，不会静默清空
-- 从旧版 `vscode-folder-opener` 升级时，旧数据会自动迁移过来
+If a project is outside the default scan roots, add its parent directory in **Settings → Scan Roots**. Adding records, favorites, or settings never moves, modifies, or deletes project files on disk.
 
----
+### Shortcuts
 
-## 从源码构建
-
-需要 Node.js、pnpm 与 Rust 工具链。
-
-```bash
-pnpm install          # 安装依赖
-pnpm tauri dev        # 开发模式（热更新）
-pnpm tauri build      # 打包安装程序
-```
-
-产物位置：
-
-- 可执行文件：`src-tauri/target/release/agent-folder.exe`
-- 安装包：`src-tauri/target/release/bundle/nsis/`
-
-### 检查与测试
-
-```bash
-pnpm build                                   # 类型检查 + 前端构建
-pnpm test                                    # 前端单元测试
-cd src-tauri && cargo fmt --check            # Rust 格式
-cd src-tauri && cargo test                   # 后端单元测试
-```
-
----
-
-## 文档
-
-| 文件 | 内容 |
+| Shortcut | Action |
 |---|---|
-| [STRUCTURE.md](./STRUCTURE.md) | 代码分层与「新增功能改哪里」 |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | 开发约定与数据写入规则 |
-| [PLAN.md](./PLAN.md) | 产品规划与技术选型 |
+| `Ctrl+K` | Focus search |
+| `↑` / `↓` | Move through results |
+| `Enter` | Open the selected project |
+| `Ctrl+D` | Toggle favorite |
+| `Delete` | Remove a record without deleting its folder |
+| `Ctrl+,` | Open settings |
+| `Esc` | Close a panel or clear search |
+| `Ctrl+Alt+V` | Show or hide the main window; configurable in settings |
+| `Ctrl+Shift+Space` | Show or hide the quick-launch palette |
 
----
+The title-bar minimize button hides the app to the tray. The close button follows the **Minimize to tray on close** setting. To exit completely, right-click the tray icon and choose **Quit**.
 
-## 技术栈
+### Privacy and data
 
-Tauri 2 · React 19 · TypeScript · Vite 6 · Tailwind CSS 4 · Zustand 5 · Fuse.js
+Folder records and settings are stored locally at `%APPDATA%\agent-folder\data.json`. The app does not upload this data or collect usage analytics. JSON import and export are user-initiated. Automatic updates are not currently included; download and install new versions manually from GitHub Releases.
 
-托盘使用本地补丁版 `tray-icon`，修复了上游「注册失败静默忽略」与「取不到图标矩形即丢弃点击」两个问题，详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+### Build from source
 
-## 许可
+Requires Node.js, pnpm, the Rust toolchain, and the Windows WebView2 Runtime.
 
-MIT
+```powershell
+pnpm install
+pnpm build
+pnpm test
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --manifest-path src-tauri/Cargo.toml --release --offline
+$env:CI = "true"
+pnpm tauri build
+```
+
+The installer is generated in `src-tauri/target/release/bundle/nsis/`.
+
+### Developer documentation
+
+- [Project structure](STRUCTURE.md)
+- [Contribution guide](CONTRIBUTING.md)
+- [Development plan](PLAN.md)
+- [Changelog](CHANGELOG.md)
+
+### License
+
+[MIT License](LICENSE)

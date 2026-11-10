@@ -1,6 +1,6 @@
 # Agent Folder — 开发计划与技术栈
 
-> 一个 Windows 桌面小工具：搜索/浏览文件夹、维护常用文件夹历史记录、一键在 VS Code 中打开，UI 美观，支持最小化到系统托盘。
+> 本文件保留早期设计方案与技术决策记录；当前已实现功能以 [README.md](./README.md) 和 [STRUCTURE.md](./STRUCTURE.md) 为准。
 
 ---
 
@@ -37,7 +37,7 @@
 | 层 | 选型 | 理由 |
 |---|---|---|
 | 桌面框架 | **Tauri 2** | 体积小（~5-10 MB）、内存占用低、Rust 后端性能好、原生支持托盘/全局快捷键/自定义标题栏 |
-| 前端框架 | **React 18 + TypeScript** | 生态成熟，组件丰富 |
+| 前端框架 | **React 19 + TypeScript** | 生态成熟，组件丰富 |
 | 构建工具 | **Vite** | 开发体验好，HMR 快 |
 | 样式 | **Tailwind CSS 4 + shadcn/ui** | 快速做出精致 UI；shadcn/ui 组件质量高、可定制 |
 | 动效 | **Framer Motion** | 列表进出、页面切换动画流畅自然 |
@@ -112,7 +112,7 @@
 │  🕘 最近使用                             │
 │  📁 workspace\frontend        2 分钟前   │
 │  📁 D:\projects\api-server    1 小时前   │
-│  📁 E:\workspace\ml-notes     昨天       │
+│  📁 D:\projects\example-project     yesterday    │
 ├──────────────────────────────────────────┤
 │  [+ 添加文件夹]            [⚙ 设置] [—] │  ← 最小化到托盘按钮
 └──────────────────────────────────────────┘
