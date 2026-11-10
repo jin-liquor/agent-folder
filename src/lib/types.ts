@@ -33,6 +33,21 @@ export interface AppSettings {
   editorPathOverride?: string | null;
 }
 
+export interface StorageStatus {
+  warning: string | null;
+  backupPath: string | null;
+  readOnly: boolean;
+}
+
+export interface HotkeyStatus {
+  toggleHotkey: string;
+  toggleRegistered: boolean;
+  toggleError: string | null;
+  quickHotkey: string;
+  quickRegistered: boolean;
+  quickError: string | null;
+}
+
 /** 探测到的编辑器。 */
 export interface EditorInfo {
   id: string;
@@ -49,7 +64,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   closeToTray: true,
   launchOnStartup: false,
   hideAfterOpen: true,
-  trustFolders: true,
+  trustFolders: false,
   searchRoots: [],
   editorPathOverride: null,
 };

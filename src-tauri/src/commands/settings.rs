@@ -3,13 +3,32 @@
 use tauri::{AppHandle, State};
 
 use crate::model::AppSettings;
-use crate::storage::Store;
+use crate::storage::{StorageStatus, Store};
 use crate::system::{hotkey, tray};
 
 /// 读取当前设置。
 #[tauri::command]
 pub fn get_settings(state: State<Store>) -> AppSettings {
     state.data().settings.clone()
+}
+
+/// 返回启动时的数据恢复或保护状态。
+#[tauri::command]
+pub fn get_storage_status(state: State<Store>) -> StorageStatus {
+    state.status()
+}
+
+/// 返回当前两组快捷键的实际注册状态。
+#[tauri::command]
+pub fn get_hotkey_status() -> hotkey::HotkeyStatus {
+    hotkey::status()
+}
+
+/// 使用当前保存的设置重新注册快捷键。
+#[tauri::command]
+pub fn retry_hotkeys(state: State<Store>, app: AppHandle) -> Result<hotkey::HotkeyStatus, String> {
+    let shortcut = state.data().settings.global_hotkey.clone();
+    hotkey::register_all(&app, &shortcut)
 }
 
 /// 保存设置。
@@ -31,10 +50,15 @@ pub fn save_settings(
 
     // 第二步：锁外注册快捷键，避免系统调用阻塞其他命令。
     if hotkey_changed {
-        if let Err(error) = hotkey::register_all(&app, &settings.global_hotkey) {
-            // 注册失败时恢复原快捷键，保证系统状态与应用记录一致。
+        let status = hotkey::register_all(&app, &settings.global_hotkey)?;
+        if !status.toggle_registered {
             let _ = hotkey::register_all(&app, &previous.global_hotkey);
-            return Err(format!("快捷键设置失败：{error}"));
+            return Err(format!(
+                "主窗口快捷键注册失败：{}",
+                status
+                    .toggle_error
+                    .unwrap_or_else(|| "可能已被其他程序占用".into())
+            ));
         }
     }
 

@@ -12,6 +12,7 @@ import {
   type AppSettings,
   type EditorInfo,
   type FolderRecord,
+  type StorageStatus,
 } from "../lib/types";
 
 /** 串行化设置写入，避免连续切换开关时后写覆盖先写。 */
@@ -24,6 +25,7 @@ interface AppState {
   loaded: boolean;
   /** 目录已不存在的记录 id 集合。 */
   missing: Set<string>;
+  storageStatus: StorageStatus | null;
 
   load: () => Promise<void>;
   refreshEditors: () => Promise<void>;
@@ -37,7 +39,7 @@ interface AppState {
   renameFolder: (id: string, name: string) => Promise<FolderRecord>;
   setFolderColor: (id: string, color: string | null) => Promise<FolderRecord>;
   setFolderTags: (id: string, tags: string[]) => Promise<FolderRecord>;
-  openPath: (path: string) => Promise<string | null>;
+  openPath: (path: string) => Promise<commands.OpenResult>;
   saveSettings: (patch: Partial<AppSettings>) => Promise<void>;
   syncFolder: (record: FolderRecord) => void;
 }
@@ -48,13 +50,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   editors: [],
   loaded: false,
   missing: new Set<string>(),
+  storageStatus: null,
 
   load: async () => {
-    const [folders, settings] = await Promise.all([
+    const [folders, settings, storageStatus] = await Promise.all([
       commands.listFolders(),
       commands.getSettings(),
+      commands.getStorageStatus(),
     ]);
-    set({ folders, settings, loaded: true });
+    set({ folders, settings, storageStatus, loaded: true });
   },
 
   scanMissing: async () => {
@@ -113,8 +117,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openPath: async (path) => {
     const result = await commands.openInEditor(path);
-    get().syncFolder(result.record);
-    return result.command;
+    if (result.historySaved) get().syncFolder(result.record);
+    return result;
   },
 
   saveSettings: (patch) => {

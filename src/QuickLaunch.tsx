@@ -75,7 +75,11 @@ export default function QuickLaunch() {
   const openRecord = useCallback(
     async (record: FolderRecord) => {
       try {
-        await openPath(record.path);
+        const result = await openPath(record.path);
+        if (!result.historySaved) {
+          setError(`已打开，但历史记录未保存：${result.historyError ?? "请稍后重试"}`);
+          return;
+        }
         await dismiss();
         setQuery("");
       } catch (err) {

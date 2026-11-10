@@ -11,7 +11,7 @@ mod store;
 // `AppData` 供测试与内部使用，非公开 API。
 #[allow(unused_imports)]
 pub use data::AppData;
-pub use store::Store;
+pub use store::{StorageStatus, Store};
 
 #[cfg(test)]
 mod tests {
@@ -133,6 +133,26 @@ mod tests {
         assert_eq!(kept.name, "本地名称", "已有记录必须保留本地版本");
     }
 
+    #[test]
+    fn import_reports_capacity_trimmed_records() {
+        use crate::model::FolderRecord;
+
+        let mut data = AppData::default();
+        for i in 0..MAX_RECORDS {
+            data.upsert(&format!("C:\\\\existing\\\\item{i}"));
+        }
+        let incoming: Vec<FolderRecord> = (0..20)
+            .map(|i| FolderRecord {
+                path: format!("C:\\\\imported\\\\item{i}"),
+                ..Default::default()
+            })
+            .collect();
+
+        let summary = data.merge_imported(incoming);
+        assert_eq!(summary.added + summary.trimmed, 20);
+        assert_eq!(data.folders.len(), MAX_RECORDS);
+        assert!(summary.trimmed > 0);
+    }
     #[test]
     fn import_fills_missing_fields() {
         use crate::model::FolderRecord;

@@ -99,7 +99,7 @@ impl AppData {
         &mut self,
         incoming: Vec<FolderRecord>,
     ) -> crate::commands::ImportSummary {
-        let mut added = 0;
+        let mut added_ids = Vec::new();
         let mut skipped = 0;
 
         for mut record in incoming {
@@ -124,12 +124,20 @@ impl AppData {
             if record.kind.is_none() {
                 record.kind = project::detect(&record.path).map(|k| k.id.to_string());
             }
+            added_ids.push(record.id.clone());
             self.folders.push(record);
-            added += 1;
         }
 
         self.trim_history();
-        crate::commands::ImportSummary { added, skipped }
+        let added = added_ids
+            .iter()
+            .filter(|id| self.folders.iter().any(|record| record.id == id.as_str()))
+            .count();
+        crate::commands::ImportSummary {
+            added,
+            skipped,
+            trimmed: added_ids.len() - added,
+        }
     }
 
     /// 裁剪非收藏记录，使总数不超过 [`MAX_RECORDS`]。

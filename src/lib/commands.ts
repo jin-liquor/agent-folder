@@ -6,12 +6,20 @@
  * - 新增后端命令时，在此追加同名导出，界面层不直接使用 `invoke`。
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, EditorInfo, FolderRecord } from "./types";
+import type {
+  AppSettings,
+  EditorInfo,
+  FolderRecord,
+  HotkeyStatus,
+  StorageStatus,
+} from "./types";
 
 /** 打开文件夹命令的返回值。 */
 export interface OpenResult {
   record: FolderRecord;
   command: string;
+  historySaved: boolean;
+  historyError: string | null;
 }
 
 // ---------------------------------------------------------------- 文件夹记录
@@ -52,6 +60,9 @@ export const detectEditors = () => invoke<EditorInfo[]>("detect_editors");
 
 // ---------------------------------------------------------------------- 设置
 export const getSettings = () => invoke<AppSettings>("get_settings");
+export const getStorageStatus = () => invoke<StorageStatus>("get_storage_status");
+export const getHotkeyStatus = () => invoke<HotkeyStatus>("get_hotkey_status");
+export const retryHotkeys = () => invoke<HotkeyStatus>("retry_hotkeys");
 export const saveSettings = (settings: AppSettings) =>
   invoke<AppSettings>("save_settings", { settings });
 
@@ -63,4 +74,4 @@ export const scanFolders = (query: string) => invoke<string[]>("scan_folders", {
 export const exportData = (path: string) => invoke<number>("export_data", { path });
 /** 导入记录，返回新增与跳过的数量。 */
 export const importData = (path: string) =>
-  invoke<{ added: number; skipped: number }>("import_data", { path });
+  invoke<{ added: number; skipped: number; trimmed: number }>("import_data", { path });

@@ -49,7 +49,8 @@ pub fn run() {
                 let value = store.data().settings.global_hotkey.clone();
                 value
             };
-            if let Err(error) = system::hotkey::register_all(app.handle(), &hotkey) {
+            let status = system::hotkey::register_all(app.handle(), &hotkey);
+            if let Err(error) = status {
                 eprintln!("注册快捷键失败: {error}");
             }
             Ok(())

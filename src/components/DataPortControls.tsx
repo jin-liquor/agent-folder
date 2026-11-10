@@ -48,8 +48,9 @@ export default function DataPortControls({ onImported, onToast }: Props) {
       if (!path) return;
       const summary = await commands.importData(path);
       onImported();
-      const parts = [`新增 ${summary.added} 条`];
-      if (summary.skipped > 0) parts.push(`跳过 ${summary.skipped} 条（已存在）`);
+      const parts = [`新增并保留 ${summary.added} 条`];
+      if (summary.trimmed > 0) parts.push(`因容量上限裁剪 ${summary.trimmed} 条`);
+      if (summary.skipped > 0) parts.push(`跳过 ${summary.skipped} 条（已存在或无效）`);
       onToast(`导入完成：${parts.join("，")}`);
     } catch (error) {
       onToast(`导入失败：${errorText(error)}`);

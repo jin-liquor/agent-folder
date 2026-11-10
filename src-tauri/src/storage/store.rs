@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use super::data::AppData;
+use serde::Serialize;
 
 /// 当前应用的数据目录名。
 const APP_DIR: &str = "agent-folder";
@@ -33,43 +34,74 @@ pub fn store_path() -> PathBuf {
     data_dir().join("data.json")
 }
 
+/// 可恢复或受保护的数据加载状态。
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageStatus {
+    pub warning: Option<String>,
+    pub backup_path: Option<String>,
+    pub read_only: bool,
+}
+
 /// 全局共享的应用状态。
 ///
 /// 通过 `tauri::Manager::manage` 注入，命令层以 `State<Store>` 取得。
 pub struct Store {
     path: PathBuf,
     pub data: Mutex<AppData>,
+    status: StorageStatus,
 }
 
 impl Store {
-    /// 从磁盘加载；文件缺失或损坏时退回默认值，保证应用总能启动。
+    /// 从磁盘加载；读取异常时保留错误状态，禁止后续写入覆盖原文件。
     pub fn load() -> Self {
         let path = store_path();
+        let mut status = StorageStatus::default();
         if let Some(dir) = path.parent() {
-            let _ = fs::create_dir_all(dir);
+            if let Err(error) = fs::create_dir_all(dir) {
+                status = StorageStatus {
+                    warning: Some(format!("无法创建数据目录：{error}")),
+                    backup_path: None,
+                    read_only: true,
+                };
+            }
         }
 
-        // 改名后首次启动：把旧目录的数据搬过来，避免历史记录丢失。
-        if !path.exists() {
-            migrate_legacy_data(&path);
+        if !path.exists() && !status.read_only {
+            if let Err(error) = migrate_legacy_data(&path) {
+                status = StorageStatus {
+                    warning: Some(format!("迁移旧数据失败：{error}")),
+                    backup_path: None,
+                    read_only: true,
+                };
+            }
         }
 
-        let mut data = load_data(&path);
+        let (mut data, loaded_status) = load_data(&path);
+        if loaded_status.warning.is_some() {
+            status = loaded_status;
+        }
 
-        // 旧版本数据没有 `kind` 字段，这里补测一次并落盘，
-        // 使升级后的首次启动就能显示项目徽标。
+        // 旧版本数据没有 `kind` 字段，这里补测一次并落盘。
         let backfilled = backfill_kinds(&mut data);
-
         let store = Self {
             path,
             data: Mutex::new(data),
+            status,
         };
 
-        if backfilled {
-            let _ = store.save();
+        if backfilled && !store.status.read_only {
+            if let Err(error) = store.save() {
+                eprintln!("补全项目类型失败：{error}");
+            }
         }
 
         store
+    }
+
+    /// 返回启动时的数据恢复/保护状态。
+    pub fn status(&self) -> StorageStatus {
+        self.status.clone()
     }
 
     /// 原子化保存：先写临时文件再替换，避免中途崩溃留下半个 JSON。
@@ -83,6 +115,13 @@ impl Store {
     /// 两次加锁会在「修改」与「存盘」之间留下窗口期，导致并发写入互相覆盖；
     /// 调用方必须保证 `data` 来自本 Store 的锁。
     pub fn save_locked(&self, data: &AppData) -> Result<(), String> {
+        if self.status.read_only {
+            return Err(self
+                .status
+                .warning
+                .clone()
+                .unwrap_or_else(|| "数据处于只读保护状态，拒绝写入".into()));
+        }
         let json = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
 
         let tmp = self.path.with_extension("json.tmp");
@@ -113,6 +152,7 @@ impl Store {
         Self {
             path,
             data: Mutex::new(data),
+            status: StorageStatus::default(),
         }
     }
 
@@ -123,28 +163,61 @@ impl Store {
     }
 }
 
-/// 读取数据文件；解析失败时保留原文件并回退到默认值。
-///
-/// 关键点：解析失败**不能**让后续 `save()` 覆盖掉用户的原始文件。
-/// 这里先把损坏文件改名备份，再返回默认值，这样用户仍有机会
-/// 从备份里手工抢救数据，而不是被静默清空。
-fn load_data(path: &std::path::Path) -> AppData {
-    let Ok(raw) = fs::read_to_string(path) else {
-        // 文件不存在属正常情况（首次启动）。
-        return AppData::default();
+/// 读取数据文件，并返回是否需要保护写入。
+fn load_data(path: &std::path::Path) -> (AppData, StorageStatus) {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (AppData::default(), StorageStatus::default());
+        }
+        Err(error) => {
+            return (
+                AppData::default(),
+                StorageStatus {
+                    warning: Some(format!("无法读取数据文件：{error}，已启用只读保护")),
+                    backup_path: None,
+                    read_only: true,
+                },
+            );
+        }
     };
 
     match serde_json::from_str::<AppData>(&raw) {
-        Ok(data) => data,
+        Ok(data) => (data, StorageStatus::default()),
         Err(error) => {
-            eprintln!("数据文件解析失败，已备份原文件：{error}");
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             let backup = path.with_extension(format!("corrupt-{stamp}.json"));
-            let _ = fs::rename(path, &backup);
-            AppData::default()
+            match fs::rename(path, &backup) {
+                Ok(()) => {
+                    eprintln!("数据文件解析失败，原文件已备份：{error}");
+                    (
+                        AppData::default(),
+                        StorageStatus {
+                            warning: Some(
+                                "数据文件损坏，已保留原文件并创建备份；当前使用空数据启动".into(),
+                            ),
+                            backup_path: Some(backup.display().to_string()),
+                            read_only: false,
+                        },
+                    )
+                }
+                Err(backup_error) => {
+                    eprintln!("数据文件解析失败，创建备份失败：{backup_error}");
+                    (
+                        AppData::default(),
+                        StorageStatus {
+                            warning: Some(format!(
+                                "数据文件损坏且无法创建备份：{backup_error}，已启用只读保护"
+                            )),
+                            backup_path: None,
+                            read_only: true,
+                        },
+                    )
+                }
+            }
         }
     }
 }
@@ -153,12 +226,14 @@ fn load_data(path: &std::path::Path) -> AppData {
 ///
 /// 采用「复制」而非「移动」，这样即使新版本出现问题，
 /// 用户回退旧版本时历史记录依然在。
-fn migrate_legacy_data(target: &std::path::Path) -> bool {
+fn migrate_legacy_data(target: &std::path::Path) -> Result<bool, String> {
     let legacy = legacy_data_dir().join("data.json");
     if !legacy.exists() {
-        return false;
+        return Ok(false);
     }
-    fs::copy(&legacy, target).is_ok()
+    fs::copy(&legacy, target)
+        .map(|_| true)
+        .map_err(|error| format!("无法复制旧数据文件：{error}"))
 }
 
 /// 加载时校正记录的 `kind`；返回是否有改动。
@@ -204,8 +279,9 @@ mod tests {
     #[test]
     fn missing_file_falls_back_to_defaults() {
         let dir = temp_dir("missing");
-        let data = load_data(&dir.join("data.json"));
+        let (data, status) = load_data(&dir.join("data.json"));
         assert!(data.folders.is_empty());
+        assert!(!status.read_only);
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -215,8 +291,10 @@ mod tests {
         let path = dir.join("data.json");
         std::fs::write(&path, "{ this is not valid json").unwrap();
 
-        let data = load_data(&path);
+        let (data, status) = load_data(&path);
         assert!(data.folders.is_empty(), "解析失败应回退到默认值");
+        assert!(!status.read_only);
+        assert!(status.backup_path.is_some(), "应返回可恢复备份路径");
 
         // 原文件必须已被改名保留，而不是留在原地等待被覆盖。
         assert!(!path.exists(), "损坏文件应被移走");
@@ -234,6 +312,27 @@ mod tests {
     }
 
     #[test]
+    fn read_error_enables_write_protection() {
+        let dir = temp_dir("read-error");
+        let path = dir.join("data.json");
+        std::fs::create_dir(&path).unwrap();
+
+        let (data, status) = load_data(&path);
+        assert!(data.folders.is_empty());
+        assert!(status.read_only);
+        assert!(status.warning.is_some());
+
+        let store = super::Store {
+            path,
+            data: std::sync::Mutex::new(data),
+            status,
+        };
+        assert!(store.save().is_err(), "读取异常后必须拒绝写入");
+        assert!(store.path.is_dir(), "原始路径不得被覆盖");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn valid_file_round_trips() {
         let dir = temp_dir("valid");
         let path = dir.join("data.json");
@@ -243,9 +342,10 @@ mod tests {
         )
         .unwrap();
 
-        let data = load_data(&path);
+        let (data, status) = load_data(&path);
         assert_eq!(data.folders.len(), 1);
         assert_eq!(data.folders[0].id, "a");
+        assert!(!status.read_only);
         assert!(path.exists(), "有效文件不应被移动");
 
         std::fs::remove_dir_all(&dir).ok();
@@ -264,6 +364,7 @@ mod tests {
         let store = super::Store {
             path: std::path::PathBuf::from("unused.json"),
             data: std::sync::Mutex::new(AppData::default()),
+            status: super::StorageStatus::default(),
         };
 
         let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

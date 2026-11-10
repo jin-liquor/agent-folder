@@ -14,6 +14,8 @@ use crate::system::tray;
 pub struct OpenResult {
     pub record: FolderRecord,
     pub command: String,
+    pub history_saved: bool,
+    pub history_error: Option<String>,
 }
 
 /// 在编辑器中打开文件夹，并记录一次历史。
@@ -37,11 +39,28 @@ pub fn open_in_editor(
 
     let command = editor::open_folder(&path, &editor_id, override_path.as_deref(), trust_folders)?;
 
-    let record = state.data().upsert(&path);
-    state.save()?;
-    tray::rebuild_menu(&app);
+    let (record, history_saved, history_error) = {
+        let mut data = state.data();
+        let snapshot = data.clone();
+        let record = data.upsert(&path);
+        match state.save_locked(&data) {
+            Ok(()) => (record, true, None),
+            Err(error) => {
+                *data = snapshot;
+                (record, false, Some(error))
+            }
+        }
+    };
+    if history_saved {
+        tray::rebuild_menu(&app);
+    }
 
-    Ok(OpenResult { record, command })
+    Ok(OpenResult {
+        record,
+        command,
+        history_saved,
+        history_error,
+    })
 }
 
 /// 在资源管理器中选中文件夹。

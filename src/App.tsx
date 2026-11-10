@@ -22,6 +22,7 @@ import AddFolderDialog from "./components/AddFolderDialog";
 import Toast from "./components/Toast";
 import ScanResultItem from "./components/ScanResultItem";
 import SectionTitle from "./components/SectionTitle";
+import StorageNotice from "./components/StorageNotice";
 import { PlusIcon, StarIcon } from "./components/Icons";
 import {
   useFolderList,
@@ -35,6 +36,7 @@ export default function App() {
   const {
     folders,
     settings,
+    storageStatus,
     loaded,
     missing,
     load,
@@ -105,9 +107,13 @@ export default function App() {
   const openRecord = useCallback(
     async (record: FolderRecord) => {
       try {
-        const command = await openPath(record.path);
-        if (!command) throw new Error("编辑器没有返回启动结果");
-        toast.show(`已打开「${record.name}」`);
+        const result = await openPath(record.path);
+        if (!result.command) throw new Error("编辑器没有返回启动结果");
+        toast.show(
+          result.historySaved
+            ? `已打开「${record.name}」`
+            : `已打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+        );
         if (settings.hideAfterOpen) void system.hideWindow();
       } catch (error: unknown) {
         toast.show(`打开失败：${errorText(error)}`);
@@ -119,8 +125,12 @@ export default function App() {
   const openScanPath = useCallback(
     async (path: string) => {
       try {
-        await openPath(path);
-        toast.show(`已打开 ${path}`);
+        const result = await openPath(path);
+        toast.show(
+          result.historySaved
+            ? `已打开 ${path}`
+            : `已打开 ${path}，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+        );
         if (settings.hideAfterOpen) void system.hideWindow();
       } catch (error: unknown) {
         toast.show(`打开失败：${errorText(error)}`);
@@ -329,6 +339,7 @@ export default function App() {
   return (
     <div className="window-glass relative flex h-full flex-col overflow-hidden rounded-xl">
       <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
+      <StorageNotice status={storageStatus} />
 
       <SearchBar
         ref={inputRef}

@@ -7,7 +7,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { errorText } from "../lib/errors";
-import type { AppSettings, EditorInfo } from "../lib/types";
+import * as commands from "../lib/commands";
+import type { AppSettings, EditorInfo, HotkeyStatus } from "../lib/types";
 import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./Icons";
 import SettingRow from "./ui/SettingRow";
 import Switch from "./ui/Switch";
@@ -52,11 +53,14 @@ export default function SettingsDrawer({
   const { settings, saveSettings, editors, refreshEditors } = useAppStore();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hotkeyStatus, setHotkeyStatus] = useState<HotkeyStatus | null>(null);
+  const [retryingHotkeys, setRetryingHotkeys] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setDraft(settings);
     setSaveError(null);
+    void commands.getHotkeyStatus().then(setHotkeyStatus).catch(() => setHotkeyStatus(null));
     if (editors.length === 0) void refreshEditors();
     // 仅在打开时同步草稿，避免保存过程中被覆盖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,6 +78,20 @@ export default function SettingsDrawer({
   const update = (patch: Partial<AppSettings>) => {
     setDraft((current) => ({ ...current, ...patch }));
     persist(patch);
+  };
+
+  const retryHotkeys = async () => {
+    setRetryingHotkeys(true);
+    try {
+      const status = await commands.retryHotkeys();
+      setHotkeyStatus(status);
+      onToast(status.toggleRegistered ? "快捷键注册已刷新" : "主窗口快捷键仍未注册，请更换组合键");
+    } catch (error) {
+      setHotkeyStatus(await commands.getHotkeyStatus().catch(() => null));
+      onToast(`快捷键重试失败：${errorText(error)}`);
+    } finally {
+      setRetryingHotkeys(false);
+    }
   };
 
   const editorOptions = editors.length > 0 ? editors : FALLBACK_EDITORS;
@@ -152,6 +170,24 @@ export default function SettingsDrawer({
                     error={saveError}
                   />
                 </SettingRow>
+                <div className="-mt-2 mb-3 flex items-start justify-between gap-2 text-[10px] leading-relaxed">
+                  <div className="min-w-0 space-y-1">
+                    <div className={hotkeyStatus?.toggleRegistered ? "text-emerald-600" : "text-red-500"}>
+                      主窗口：{hotkeyStatus?.toggleRegistered ? `${hotkeyStatus.toggleHotkey} 已生效` : hotkeyStatus?.toggleError ?? "未注册"}
+                    </div>
+                    <div className={hotkeyStatus?.quickRegistered ? "text-emerald-600" : "text-red-500"}>
+                      快速启动：{hotkeyStatus?.quickRegistered ? `${hotkeyStatus.quickHotkey} 已生效` : hotkeyStatus?.quickError ?? "未注册"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void retryHotkeys()}
+                    disabled={retryingHotkeys}
+                    className="shrink-0 rounded-md border border-[var(--glass-border)] px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                  >
+                    {retryingHotkeys ? "重试中…" : "重试"}
+                  </button>
+                </div>
 
                 <SettingRow label="关闭时最小化到托盘" desc="点关闭按钮不退出，仅隐藏窗口">
                   <Switch
@@ -163,7 +199,7 @@ export default function SettingsDrawer({
 
                 <SettingRow
                   label="跳过 VS Code 工作区信任确认"
-                  desc="仅对 VS Code 生效。开启后打开文件夹不再弹出安全确认，会降低防护，请只在你自己的项目上使用"
+                  desc="默认关闭；仅对 VS Code 和 Insiders 生效。开启后不再弹出工作区安全确认，建议只用于你信任的项目"
                 >
                   <Switch
                     label="跳过 VS Code 工作区信任确认"

@@ -9,7 +9,9 @@
 //! 否则先注册的会被后注册的注销掉。
 
 use std::str::FromStr;
+use std::sync::{Mutex, OnceLock};
 
+use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
@@ -25,53 +27,75 @@ use crate::system::window;
 /// 若将来需要可配置，再扩展 `AppSettings` 即可。
 pub const QUICK_LAUNCH_HOTKEY: &str = "Ctrl+Shift+Space";
 
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HotkeyStatus {
+    pub toggle_hotkey: String,
+    pub toggle_registered: bool,
+    pub toggle_error: Option<String>,
+    pub quick_hotkey: String,
+    pub quick_registered: bool,
+    pub quick_error: Option<String>,
+}
+
+static STATUS: OnceLock<Mutex<HotkeyStatus>> = OnceLock::new();
+
+pub fn status() -> HotkeyStatus {
+    STATUS
+        .get_or_init(|| Mutex::new(HotkeyStatus::default()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+fn set_status(value: HotkeyStatus) {
+    *STATUS
+        .get_or_init(|| Mutex::new(HotkeyStatus::default()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = value;
+}
+
 /// 注册全部全局快捷键（先清空旧的注册）。
 ///
-/// 返回实际注册成功的快捷键列表，便于调用方判断哪一组失效。
-/// 注册失败不会中断其余快捷键：例如主窗口快捷键被占用时，
-/// 快速启动仍应可用。
-pub fn register_all(app: &AppHandle, toggle_hotkey: &str) -> Result<Vec<String>, String> {
+/// 两组快捷键分别记录成功与失败；单组冲突不会掩盖另一组的实际状态。
+pub fn register_all(app: &AppHandle, toggle_hotkey: &str) -> Result<HotkeyStatus, String> {
     let toggle = Shortcut::from_str(toggle_hotkey)
         .map_err(|e| format!("无效的快捷键 {toggle_hotkey}: {e}"))?;
     let quick = Shortcut::from_str(QUICK_LAUNCH_HOTKEY)
         .map_err(|e| format!("无效的快捷键 {QUICK_LAUNCH_HOTKEY}: {e}"))?;
 
     let _ = app.global_shortcut().unregister_all();
-    let mut registered = Vec::new();
-
-    // 两组快捷键独立注册，一组失败不影响另一组。
-    if app
+    let toggle_result = app
         .global_shortcut()
         .on_shortcut(toggle, |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 window::toggle(app);
             }
-        })
-        .is_ok()
-    {
-        registered.push(toggle_hotkey.to_string());
-    } else {
-        eprintln!("注册主窗口快捷键失败（可能已被其他程序占用）：{toggle_hotkey}");
-    }
-
-    if app
+        });
+    let quick_result = app
         .global_shortcut()
         .on_shortcut(quick, |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
                 window::toggle_quick(app);
             }
-        })
-        .is_ok()
-    {
-        registered.push(QUICK_LAUNCH_HOTKEY.to_string());
-    } else {
-        eprintln!("注册快速启动快捷键失败（可能已被其他程序占用）：{QUICK_LAUNCH_HOTKEY}");
-    }
+        });
 
-    if registered.is_empty() {
-        return Err("所有全局快捷键都注册失败，可能已被其他程序占用".into());
+    let value = HotkeyStatus {
+        toggle_hotkey: toggle_hotkey.to_string(),
+        toggle_registered: toggle_result.is_ok(),
+        toggle_error: toggle_result.err().map(|error| error.to_string()),
+        quick_hotkey: QUICK_LAUNCH_HOTKEY.to_string(),
+        quick_registered: quick_result.is_ok(),
+        quick_error: quick_result.err().map(|error| error.to_string()),
+    };
+    if let Some(error) = &value.toggle_error {
+        eprintln!("注册主窗口快捷键失败：{toggle_hotkey}: {error}");
     }
-    Ok(registered)
+    if let Some(error) = &value.quick_error {
+        eprintln!("注册快速启动快捷键失败：{QUICK_LAUNCH_HOTKEY}: {error}");
+    }
+    set_status(value.clone());
+    Ok(value)
 }
 
 /// 校验快捷键字符串是否合法，不实际注册（设置界面即时校验用）。
