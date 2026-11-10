@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --glass-solid: #ffffff;
+  --glass-bg: rgba(248, 250, 252, 0.82);
+  --glass-border: rgba(15, 23, 42, 0.09);
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --accent: #3b82f6;
+  --accent-2: #13a59c;
+  color-scheme: light;
+}
+
+.dark {
+  --glass-solid: #161a22;
+  --glass-bg: rgba(19, 23, 31, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #e7ecf4;
+  --text-secondary: #8b96a8;
+  --accent: #4d9fff;
+  --accent-2: #42b9ad;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", "PingFang SC",
+    "Microsoft YaHei UI", system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+input {
+  user-select: text;
+  cursor: text;
+}
+
+.window-glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+}
+
+.accent-gradient {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.row-hover:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.row-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.row-selected.row-hover:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+}
+
+button {
+  cursor: pointer;
+}
+
+mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1;
+}

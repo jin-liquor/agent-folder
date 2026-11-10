@@ -1,0 +1,22 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+*.local
+.DS_Store
+
+# 编辑器与工具
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+
+# Python（图标生成脚本）
+__pycache__/
+*.pyc
+.venv/
+
+# 日志与临时产物
+*.log
+*.tmp

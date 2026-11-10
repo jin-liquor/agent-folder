@@ -1,0 +1,249 @@
+/**
+ * 设置抽屉：外观、编辑器、快捷键与行为开关。
+ *
+ * 每个改动立即持久化；失败时回滚草稿并提示原因。
+ */
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { useAppStore } from "../stores/useAppStore";
+import { errorText } from "../lib/errors";
+import type { AppSettings, EditorInfo } from "../lib/types";
+import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./Icons";
+import SettingRow from "./ui/SettingRow";
+import Switch from "./ui/Switch";
+import ScanRootsEditor from "./ScanRootsEditor";
+import DataPortControls from "./DataPortControls";
+import HotkeyInput from "./HotkeyInput";
+
+/** 主题选项。 */
+const THEME_OPTIONS = [
+  { value: "light", title: "浅色", Icon: SunIcon },
+  { value: "dark", title: "深色", Icon: MoonIcon },
+  { value: "system", title: "跟随系统", Icon: MonitorIcon },
+] as const;
+
+/** 快捷键速查表。 */
+const SHORTCUTS: [string, string][] = [
+  ["Ctrl K", "聚焦搜索框"],
+  ["↑ ↓", "选择条目"],
+  ["Enter", "在编辑器中打开"],
+  ["Ctrl D", "收藏 / 取消收藏"],
+  ["Delete", "移除记录"],
+];
+
+/** 编辑器列表为空时的兜底项，避免下拉框空白。 */
+const FALLBACK_EDITORS: EditorInfo[] = [
+  { id: "vscode", name: "Visual Studio Code", available: true },
+];
+
+export default function SettingsDrawer({
+  open,
+  onClose,
+  onImported,
+  onToast,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** 导入完成后刷新列表。 */
+  onImported: () => void;
+  /** 结果提示，复用外层 toast。 */
+  onToast: (message: string) => void;
+}) {
+  const { settings, saveSettings, editors, refreshEditors } = useAppStore();
+  const [draft, setDraft] = useState<AppSettings>(settings);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft(settings);
+    setSaveError(null);
+    if (editors.length === 0) void refreshEditors();
+    // 仅在打开时同步草稿，避免保存过程中被覆盖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  /** 保存单个字段；失败时用最新服务端状态回滚。 */
+  const persist = (patch: Partial<AppSettings>) => {
+    setSaveError(null);
+    void saveSettings(patch).catch((error: unknown) => {
+      setDraft(useAppStore.getState().settings);
+      setSaveError(errorText(error));
+    });
+  };
+
+  const update = (patch: Partial<AppSettings>) => {
+    setDraft((current) => ({ ...current, ...patch }));
+    persist(patch);
+  };
+
+  const editorOptions = editors.length > 0 ? editors : FALLBACK_EDITORS;
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 z-20 bg-black/25"
+          />
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 350 }}
+            className="absolute top-0 right-0 z-30 flex h-full w-[340px] flex-col border-l border-[var(--glass-border)] bg-[var(--glass-solid)] shadow-2xl"
+          >
+            <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--glass-border)] px-4">
+              <button
+                onClick={onClose}
+                aria-label="返回"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)]"
+              >
+                <ArrowLeftIcon size={15} />
+              </button>
+              <span className="text-[13px] font-semibold">设置</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-6">
+              <div className="divide-y divide-[var(--glass-border)]">
+                <SettingRow label="外观" desc="选择界面主题">
+                  <div className="flex gap-1.5">
+                    {THEME_OPTIONS.map(({ value, title, Icon }) => (
+                      <button
+                        key={value}
+                        title={title}
+                        aria-label={title}
+                        onClick={() => update({ theme: value })}
+                        className={`flex h-8 w-12 items-center justify-center rounded-lg border transition ${
+                          draft.theme === value
+                            ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]"
+                            : "border-[var(--glass-border)] text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)]"
+                        }`}
+                      >
+                        <Icon size={14} />
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
+
+                <SettingRow label="默认编辑器" desc="点击文件夹时使用的编辑器">
+                  <select
+                    value={draft.defaultEditor}
+                    aria-label="默认编辑器"
+                    onChange={(event) => update({ defaultEditor: event.target.value })}
+                    className="h-8 rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[12px] text-[var(--text-primary)] outline-none"
+                  >
+                    {editorOptions.map((editor) => (
+                      <option key={editor.id} value={editor.id} disabled={!editor.available}>
+                        {editor.name}
+                        {editor.available ? "" : "（未检测到）"}
+                      </option>
+                    ))}
+                  </select>
+                </SettingRow>
+
+                <SettingRow label="全局快捷键" desc="点击后按下组合键即可修改">
+                  <HotkeyInput
+                    value={draft.globalHotkey}
+                    onChange={(hotkey) => update({ globalHotkey: hotkey })}
+                    error={saveError}
+                  />
+                </SettingRow>
+
+                <SettingRow label="关闭时最小化到托盘" desc="点关闭按钮不退出，仅隐藏窗口">
+                  <Switch
+                    label="关闭时最小化到托盘"
+                    checked={draft.closeToTray}
+                    onChange={(value) => update({ closeToTray: value })}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  label="跳过 VS Code 工作区信任确认"
+                  desc="仅对 VS Code 生效。开启后打开文件夹不再弹出安全确认，会降低防护，请只在你自己的项目上使用"
+                >
+                  <Switch
+                    label="跳过 VS Code 工作区信任确认"
+                    checked={draft.trustFolders}
+                    onChange={(value) => update({ trustFolders: value })}
+                  />
+                </SettingRow>
+
+                <SettingRow label="打开后隐藏窗口" desc="打开文件夹后自动隐藏到托盘">
+                  <Switch
+                    label="打开后隐藏窗口"
+                    checked={draft.hideAfterOpen}
+                    onChange={(value) => update({ hideAfterOpen: value })}
+                  />
+                </SettingRow>
+
+                <SettingRow label="开机自启动" desc="登录 Windows 后自动在托盘待命">
+                  <Switch
+                    label="开机自启动"
+                    checked={draft.launchOnStartup}
+                    onChange={(value) => update({ launchOnStartup: value })}
+                  />
+                </SettingRow>
+
+                <SettingRow label="编辑器可执行文件路径" desc="留空则自动检测（可选覆盖）">
+                  <input
+                    value={draft.editorPathOverride ?? ""}
+                    placeholder="自动检测"
+                    spellCheck={false}
+                    aria-label="编辑器可执行文件路径"
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        editorPathOverride: event.target.value || null,
+                      }))
+                    }
+                    onBlur={() => persist({ editorPathOverride: draft.editorPathOverride })}
+                    className="h-8 w-[150px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
+                  />
+                </SettingRow>
+
+                <SettingRow label="磁盘扫描范围" desc="搜不到项目时，先把所在磁盘目录加进来">
+                  <ScanRootsEditor
+                    roots={draft.searchRoots}
+                    onChange={(roots) => update({ searchRoots: roots })}
+                  />
+                </SettingRow>
+
+                <SettingRow label="数据备份" desc="导出为 JSON 文件；导入时按路径合并，不覆盖已有记录">
+                  <DataPortControls onImported={onImported} onToast={onToast} />
+                </SettingRow>
+              </div>
+
+              {saveError && (
+                <div
+                  role="alert"
+                  className="mt-4 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2 text-[11px] leading-relaxed break-words text-red-500"
+                >
+                  保存失败：{saveError}
+                </div>
+              )}
+
+              <div className="mt-6 rounded-xl border border-[var(--glass-border)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                <div className="mb-1 flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                  <CheckIcon size={12} className="text-emerald-500" />
+                  快捷键速查
+                </div>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                  {SHORTCUTS.map(([keys, desc]) => (
+                    <div key={keys} className="contents">
+                      <span className="kbd">{keys}</span>
+                      <span>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}

@@ -1,0 +1,35 @@
+[package]
+name = "agent-folder"
+version = "0.1.0"
+description = "快速在编辑器中打开文件夹的桌面启动器"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "agent_folder_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+walkdir = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+# 本地补丁：上游 tray-icon 会静默吞掉托盘注册失败，并在取不到图标矩形时
+# 丢弃点击事件，导致托盘图标不出现或点击无响应。这里改用 vendor 版本。
+[patch.crates-io]
+tray-icon = { path = "vendor/tray-icon" }
