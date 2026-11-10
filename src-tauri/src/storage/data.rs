@@ -11,12 +11,27 @@ use crate::services::project;
 /// 收藏的记录永不裁剪。
 pub const MAX_RECORDS: usize = 500;
 
+/// 当前持久化数据结构版本。
+pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+
 /// `data.json` 的根结构。
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppData {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u32,
     pub folders: Vec<FolderRecord>,
     pub settings: AppSettings,
+}
+
+impl Default for AppData {
+    fn default() -> Self {
+        Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            folders: Vec::new(),
+            settings: AppSettings::default(),
+        }
+    }
 }
 
 impl AppData {

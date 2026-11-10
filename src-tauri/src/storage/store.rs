@@ -1,8 +1,9 @@
 //! `Store`：数据文件的持有者与访问入口。
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::data::AppData;
 use serde::Serialize;
@@ -49,7 +50,7 @@ pub struct StorageStatus {
 pub struct Store {
     path: PathBuf,
     pub data: Mutex<AppData>,
-    status: StorageStatus,
+    status: Mutex<StorageStatus>,
 }
 
 impl Store {
@@ -82,17 +83,18 @@ impl Store {
             status = loaded_status;
         }
 
-        // 旧版本数据没有 `kind` 字段，这里补测一次并落盘。
+        // 旧版本数据没有 schema 版本，这里与 kind 一起补全并落盘。
+        let migrated_schema = migrate_schema(&mut data);
         let backfilled = backfill_kinds(&mut data);
         let store = Self {
             path,
             data: Mutex::new(data),
-            status,
+            status: Mutex::new(status),
         };
 
-        if backfilled && !store.status.read_only {
+        if (migrated_schema || backfilled) && !store.status().read_only {
             if let Err(error) = store.save() {
-                eprintln!("补全项目类型失败：{error}");
+                eprintln!("数据格式迁移失败：{error}");
             }
         }
 
@@ -101,7 +103,70 @@ impl Store {
 
     /// 返回启动时的数据恢复/保护状态。
     pub fn status(&self) -> StorageStatus {
-        self.status.clone()
+        self.status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn backup_path(&self) -> Option<PathBuf> {
+        self.status().backup_path.map(PathBuf::from)
+    }
+
+    pub fn recover_backup(&self) -> Result<usize, String> {
+        let backup = self
+            .backup_path()
+            .ok_or_else(|| "当前没有可恢复的数据备份".to_string())?;
+        let raw = fs::read_to_string(&backup).map_err(|e| format!("读取备份失败：{e}"))?;
+        let mut recovered: AppData = serde_json::from_str(&raw)
+            .map_err(|e| format!("备份文件无法解析，原数据未更改：{e}"))?;
+        if recovered.schema_version > super::data::CURRENT_SCHEMA_VERSION {
+            return Err("备份数据来自更新版本的应用，当前版本不能安全恢复".into());
+        }
+        migrate_schema(&mut recovered);
+        backfill_kinds(&mut recovered);
+        let count = recovered.folders.len();
+        let json = serde_json::to_string_pretty(&recovered).map_err(|e| e.to_string())?;
+        let mut data = self.data();
+        write_atomic(&self.path, json.as_bytes())?;
+        *data = recovered;
+        *self
+            .status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = StorageStatus::default();
+        Ok(count)
+    }
+
+    pub fn export_backup(&self, destination: &Path) -> Result<(), String> {
+        let backup = self
+            .backup_path()
+            .ok_or_else(|| "当前没有可导出的数据备份".to_string())?;
+        let contents = fs::read(&backup).map_err(|e| format!("读取备份失败：{e}"))?;
+        write_atomic(destination, &contents)
+    }
+    pub fn reload(&self) -> Result<usize, String> {
+        let (mut data, status) = load_data(&self.path);
+        if let Some(warning) = status.warning.clone() {
+            *self
+                .status
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = status;
+            return Err(warning);
+        }
+        let migrated_schema = migrate_schema(&mut data);
+        let backfilled = backfill_kinds(&mut data);
+        let count = data.folders.len();
+        let mut current = self.data();
+        if migrated_schema || backfilled {
+            let json = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
+            write_atomic(&self.path, json.as_bytes())?;
+        }
+        *current = data;
+        *self
+            .status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = StorageStatus::default();
+        Ok(count)
     }
 
     /// 原子化保存：先写临时文件再替换，避免中途崩溃留下半个 JSON。
@@ -115,11 +180,10 @@ impl Store {
     /// 两次加锁会在「修改」与「存盘」之间留下窗口期，导致并发写入互相覆盖；
     /// 调用方必须保证 `data` 来自本 Store 的锁。
     pub fn save_locked(&self, data: &AppData) -> Result<(), String> {
-        if self.status.read_only {
-            return Err(self
-                .status
+        let status = self.status();
+        if status.read_only {
+            return Err(status
                 .warning
-                .clone()
                 .unwrap_or_else(|| "数据处于只读保护状态，拒绝写入".into()));
         }
         let json = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
@@ -152,7 +216,7 @@ impl Store {
         Self {
             path,
             data: Mutex::new(data),
-            status: StorageStatus::default(),
+            status: Mutex::new(StorageStatus::default()),
         }
     }
 
@@ -161,6 +225,64 @@ impl Store {
     pub fn for_bench(path: std::path::PathBuf, data: AppData) -> Self {
         Self::for_test(path, data)
     }
+}
+
+fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let name = path.file_name().ok_or_else(|| "目标路径无效".to_string())?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let suffix = format!("{}-{stamp}", std::process::id());
+    let temporary = parent.join(format!(".{}.{}.tmp", name.to_string_lossy(), suffix));
+    let backup = parent.join(format!(".{}.{}.bak", name.to_string_lossy(), suffix));
+
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|e| format!("创建临时文件失败：{e}"))?;
+    if let Err(error) = file.write_all(contents).and_then(|_| file.sync_all()) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("写入临时文件失败：{error}"));
+    }
+    drop(file);
+
+    let had_target = match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            if let Err(error) = fs::rename(path, &backup) {
+                let _ = fs::remove_file(&temporary);
+                return Err(format!("无法保留原文件：{error}"));
+            }
+            true
+        }
+        Ok(_) => {
+            let _ = fs::remove_file(&temporary);
+            return Err("目标已存在但不是普通文件".into());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!("检查目标文件失败：{error}"));
+        }
+    };
+
+    if let Err(error) = fs::rename(&temporary, path) {
+        if had_target {
+            let _ = fs::rename(&backup, path);
+        }
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("替换文件失败：{error}"));
+    }
+    if had_target {
+        let _ = fs::remove_file(backup);
+    }
+    Ok(())
 }
 
 /// 读取数据文件，并返回是否需要保护写入。
@@ -183,6 +305,18 @@ fn load_data(path: &std::path::Path) -> (AppData, StorageStatus) {
     };
 
     match serde_json::from_str::<AppData>(&raw) {
+        Ok(data) if data.schema_version > super::data::CURRENT_SCHEMA_VERSION => (
+            data.clone(),
+            StorageStatus {
+                warning: Some(format!(
+                    "数据文件版本 {} 高于当前支持版本 {}，已启用只读保护；请升级应用后再修改数据",
+                    data.schema_version,
+                    super::data::CURRENT_SCHEMA_VERSION
+                )),
+                backup_path: None,
+                read_only: true,
+            },
+        ),
         Ok(data) => (data, StorageStatus::default()),
         Err(error) => {
             let stamp = std::time::SystemTime::now()
@@ -234,6 +368,15 @@ fn migrate_legacy_data(target: &std::path::Path) -> Result<bool, String> {
     fs::copy(&legacy, target)
         .map(|_| true)
         .map_err(|error| format!("无法复制旧数据文件：{error}"))
+}
+
+fn migrate_schema(data: &mut AppData) -> bool {
+    if data.schema_version == 0 {
+        data.schema_version = super::data::CURRENT_SCHEMA_VERSION;
+        true
+    } else {
+        false
+    }
 }
 
 /// 加载时校正记录的 `kind`；返回是否有改动。
@@ -312,6 +455,86 @@ mod tests {
     }
 
     #[test]
+    fn restores_valid_backup_and_clears_warning() {
+        let dir = temp_dir("recover");
+        let path = dir.join("data.json");
+        let backup = dir.join("data.corrupt.json");
+        let mut recovered = AppData::default();
+        let record = recovered.add_folder("C:\\Recovered");
+        recovered.folders[0].favorite = true;
+        let raw = serde_json::to_string(&recovered).unwrap();
+        std::fs::write(&backup, raw).unwrap();
+        let store = super::Store {
+            path: path.clone(),
+            data: std::sync::Mutex::new(AppData::default()),
+            status: std::sync::Mutex::new(super::StorageStatus {
+                warning: Some("corrupt".into()),
+                backup_path: Some(backup.display().to_string()),
+                read_only: false,
+            }),
+        };
+
+        assert_eq!(store.recover_backup().unwrap(), 1);
+        assert_eq!(store.data().folders[0].id, record.id);
+        assert!(store.data().folders[0].favorite);
+        assert!(path.exists());
+        assert!(backup.exists(), "恢复后保留原始备份以便回滚");
+        assert!(store.status().warning.is_none());
+        assert!(!store.status().read_only);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn invalid_backup_does_not_replace_data_file() {
+        let dir = temp_dir("bad-backup");
+        let path = dir.join("data.json");
+        let backup = dir.join("data.corrupt.json");
+        std::fs::write(&path, "existing").unwrap();
+        std::fs::write(&backup, "invalid").unwrap();
+        let store = super::Store {
+            path: path.clone(),
+            data: std::sync::Mutex::new(AppData::default()),
+            status: std::sync::Mutex::new(super::StorageStatus {
+                warning: Some("corrupt".into()),
+                backup_path: Some(backup.display().to_string()),
+                read_only: false,
+            }),
+        };
+
+        assert!(store.recover_backup().is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "existing");
+        assert!(store.status().warning.is_some());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn reload_reads_external_changes() {
+        let dir = temp_dir("reload");
+        let path = dir.join("data.json");
+        std::fs::write(&path, r#"{"folders":[],"settings":{}}"#).unwrap();
+        let store = super::Store::for_test(path.clone(), AppData::default());
+        let mut disk = AppData::default();
+        disk.add_folder("C:\\Reloaded");
+        std::fs::write(&path, serde_json::to_string(&disk).unwrap()).unwrap();
+
+        assert_eq!(store.reload().unwrap(), 1);
+        assert_eq!(store.data().folders[0].path, "C:\\Reloaded");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+    #[test]
+    fn future_schema_is_read_only() {
+        let dir = temp_dir("future-schema");
+        let path = dir.join("data.json");
+        std::fs::write(&path, r#"{"schemaVersion":999,"folders":[],"settings":{}}"#).unwrap();
+
+        let (data, status) = load_data(&path);
+        assert_eq!(data.schema_version, 999);
+        assert!(status.read_only);
+        assert!(status.warning.unwrap().contains("高于当前支持版本"));
+        assert!(path.exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+    #[test]
     fn read_error_enables_write_protection() {
         let dir = temp_dir("read-error");
         let path = dir.join("data.json");
@@ -325,7 +548,7 @@ mod tests {
         let store = super::Store {
             path,
             data: std::sync::Mutex::new(data),
-            status,
+            status: std::sync::Mutex::new(status),
         };
         assert!(store.save().is_err(), "读取异常后必须拒绝写入");
         assert!(store.path.is_dir(), "原始路径不得被覆盖");
@@ -364,7 +587,7 @@ mod tests {
         let store = super::Store {
             path: std::path::PathBuf::from("unused.json"),
             data: std::sync::Mutex::new(AppData::default()),
-            status: super::StorageStatus::default(),
+            status: std::sync::Mutex::new(super::StorageStatus::default()),
         };
 
         let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

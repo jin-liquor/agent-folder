@@ -18,7 +18,24 @@ pub fn get_storage_status(state: State<Store>) -> StorageStatus {
     state.status()
 }
 
-/// 返回当前两组快捷键的实际注册状态。
+/// 恢复启动时检测到的损坏数据备份。
+#[tauri::command]
+pub fn recover_storage_backup(state: State<Store>) -> Result<usize, String> {
+    state.recover_backup()
+}
+
+/// 从磁盘重新加载数据，并刷新只读保护状态。
+#[tauri::command]
+pub fn reload_storage_data(state: State<Store>) -> Result<usize, String> {
+    state.reload()
+}
+
+/// 将启动时检测到的损坏备份原样导出到用户指定位置。
+#[tauri::command]
+pub fn export_storage_backup(state: State<Store>, path: String) -> Result<(), String> {
+    state.export_backup(std::path::Path::new(&path))
+}
+
 #[tauri::command]
 pub fn get_hotkey_status() -> hotkey::HotkeyStatus {
     hotkey::status()

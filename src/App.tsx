@@ -98,6 +98,10 @@ export default function App() {
     return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
+  const refreshStorage = useCallback(async () => {
+    await load();
+    applyTheme(useAppStore.getState().settings.theme);
+  }, [load]);
   // 查询条件变化时回到第一行，避免选中项越界。
   useEffect(() => {
     setSelected(0);
@@ -339,7 +343,7 @@ export default function App() {
   return (
     <div className="window-glass relative flex h-full flex-col overflow-hidden rounded-xl">
       <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
-      <StorageNotice status={storageStatus} />
+      <StorageNotice status={storageStatus} onChanged={refreshStorage} />
 
       <SearchBar
         ref={inputRef}

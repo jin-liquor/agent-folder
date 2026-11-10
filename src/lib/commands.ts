@@ -61,6 +61,10 @@ export const detectEditors = () => invoke<EditorInfo[]>("detect_editors");
 // ---------------------------------------------------------------------- 设置
 export const getSettings = () => invoke<AppSettings>("get_settings");
 export const getStorageStatus = () => invoke<StorageStatus>("get_storage_status");
+export const recoverStorageBackup = () => invoke<number>("recover_storage_backup");
+export const reloadStorageData = () => invoke<number>("reload_storage_data");
+export const exportStorageBackup = (path: string) =>
+  invoke<void>("export_storage_backup", { path });
 export const getHotkeyStatus = () => invoke<HotkeyStatus>("get_hotkey_status");
 export const retryHotkeys = () => invoke<HotkeyStatus>("retry_hotkeys");
 export const saveSettings = (settings: AppSettings) =>
