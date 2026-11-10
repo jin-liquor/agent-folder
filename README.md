@@ -13,6 +13,13 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 - Add tags and colors; identify common project types
 - Stay in the system tray, use global shortcuts, and open the quick-launch palette
 - Import and export local JSON data; history is capped at 500 records while favorites are preserved
+- Storage safety: a damaged `data.json` is backed up before anything else happens, and a read-only protection mode prevents silent overwrites when the backup itself fails
+- Per-hotkey registration status in settings, with a retry button, so a shortcut conflict is visible instead of failing silently
+- Atomic, rollback-safe export and merge-on-import that reports the exact number of records added, trimmed, and skipped
+
+## Current Version
+
+The latest release is **v0.1.1**. See [Release Notes](#release-notes) for the changes in this version.
 
 ## Installation
 
@@ -48,6 +55,23 @@ The title-bar minimize button hides the app to the tray. The close button follow
 ## Privacy and Data
 
 Folder records and settings are stored locally at `%APPDATA%\agent-folder\data.json`. The app does not upload this data or collect usage analytics. JSON import and export are user-initiated. Automatic updates are not currently included; download and install new versions manually from GitHub Releases.
+
+If `data.json` cannot be parsed, the app backs up the original file next to it before falling back, and settings shows the backup path together with **Reveal backup**, **Export backup**, **Restore backup**, and **Reload** actions. If creating the backup fails, the app enters read-only protection instead of overwriting your data.
+
+## Release Notes
+
+### v0.1.1
+
+- Distinguish first launch, read failure, and JSON corruption when loading storage; back up a damaged file before falling back, and enter read-only protection if the backup fails.
+- Add a schema version with migrations, plus a storage warning banner that shows the backup path and recovery actions.
+- Separate the editor-launch result from the history-write result, so an opened folder is never reported as a failed open; a failed history save rolls back in-memory state.
+- Show the real registration status of the main-window and quick-launch hotkeys separately, with the failure reason and a retry button.
+- Make export atomic with temporary-file replacement and rollback; report import results using the counts actually retained after capacity trimming.
+- Stop disabling the VS Code workspace-trust prompt by default for new installs, while preserving previously saved preferences.
+
+### v0.1.0
+
+- First public release.
 
 ## Build from Source
 
