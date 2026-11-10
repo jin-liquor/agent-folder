@@ -67,10 +67,7 @@ pnpm tauri build
 
 ## 开发文档
 
-- [项目结构](STRUCTURE.md)
-- [贡献指南](CONTRIBUTING.md)
-- [开发计划](PLAN.md)
-- [版本记录](CHANGELOG.md)
+开发规范、架构说明、发布说明和实施计划维护在本地 `AGENT.md` 与 `Plan/` 目录中，按项目约定不加入 Git 跟踪。
 
 ## 许可
 

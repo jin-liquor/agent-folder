@@ -67,10 +67,7 @@ The installer is generated in `src-tauri/target/release/bundle/nsis/`.
 
 ## Developer Documentation
 
-- [Project structure](STRUCTURE.md)
-- [Contribution guide](CONTRIBUTING.md)
-- [Development plan](PLAN.md)
-- [Changelog](CHANGELOG.md)
+Development rules, architecture notes, release notes, and implementation plans are maintained in the local `AGENT.md` and `Plan/` directory. They are intentionally excluded from Git tracking.
 
 ## License
 
