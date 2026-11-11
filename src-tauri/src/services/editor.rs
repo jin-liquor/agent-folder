@@ -101,6 +101,46 @@ fn resolve_editor(id: &str, override_path: Option<&str>) -> Option<String> {
         .and_then(|e| e.command)
 }
 
+/// 启动交互式 CLI agent。参数只由受控模式生成，避免把整条 shell 命令交给解释器。
+pub fn open_cli_agent(folder: &str, agent: &str, mode: &str) -> Result<String, String> {
+    if !PathBuf::from(folder).is_dir() {
+        return Err(format!("文件夹不存在: {folder}"));
+    }
+
+    let (command, args): (&str, Vec<&str>) = match agent {
+        "codex" => match mode {
+            "default" => ("codex", vec![]),
+            "danger-full-access" => ("codex", vec!["--sandbox", "danger-full-access"]),
+            "yolo" => ("codex", vec!["--yolo"]),
+            _ => return Err(format!("不支持的 Codex 模式: {mode}")),
+        },
+        "claude" => match mode {
+            "acceptEdits" => ("claude", vec!["--permission-mode", "acceptEdits"]),
+            "dangerously-skip-permissions" => ("claude", vec!["--dangerously-skip-permissions"]),
+            _ => return Err(format!("不支持的 Claude Code 模式: {mode}")),
+        },
+        _ => return Err(format!("不支持的 CLI 工具: {agent}")),
+    };
+
+    let command_line = if args.is_empty() {
+        command.to_string()
+    } else {
+        format!("{command} {}", args.join(" "))
+    };
+    let mut process = Command::new(command);
+    process.current_dir(folder).args(&args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+        process.creation_flags(CREATE_NEW_CONSOLE);
+    }
+    process
+        .spawn()
+        .map(|_| command_line)
+        .map_err(|error| format!("启动 {agent} 失败，请确认命令已安装并位于 PATH：{error}"))
+}
+
 /// 在编辑器中以新窗口打开文件夹，返回实际使用的命令（用于提示文案）。
 pub fn open_folder(
     folder: &str,

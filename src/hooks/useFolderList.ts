@@ -31,7 +31,10 @@ export function useFolderList({ folders, query, scanMode, scanResults }: Options
     if (searching) {
       const matched: Row[] = fuse
         .search(query.trim())
-        .map((result) => ({ kind: "record", record: result.item }));
+        .map((result) => ({ kind: "record" as const, record: result.item }));
+      const priority = (row: Row) =>
+        row.kind === "record" ? (row.record.favorite ? 2 : row.record.openCount > 0 ? 1 : 0) : 0;
+      matched.sort((a, b) => priority(b) - priority(a));
 
       const knownPaths = new Set(folders.map((f) => f.path.toLowerCase()));
       const scans: Row[] =

@@ -163,6 +163,35 @@ export default function SettingsDrawer({
                   </select>
                 </SettingRow>
 
+                <SettingRow label="Codex CLI 启动模式" desc="在项目目录打开交互式 Codex 会话">
+                  <select
+                    value={draft.codexMode}
+                    aria-label="Codex CLI 启动模式"
+                    onChange={(event) =>
+                      update({ codexMode: event.target.value as AppSettings["codexMode"] })
+                    }
+                    className="h-8 max-w-[170px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                  >
+                    <option value="default">默认</option>
+                    <option value="danger-full-access">danger-full-access（高风险）</option>
+                    <option value="yolo">yolo（高风险）</option>
+                  </select>
+                </SettingRow>
+
+                <SettingRow label="Claude Code 启动模式" desc="在项目目录打开交互式 Claude Code 会话">
+                  <select
+                    value={draft.claudeMode}
+                    aria-label="Claude Code 启动模式"
+                    onChange={(event) =>
+                      update({ claudeMode: event.target.value as AppSettings["claudeMode"] })
+                    }
+                    className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                  >
+                    <option value="acceptEdits">acceptEdits</option>
+                    <option value="dangerously-skip-permissions">dangerously-skip-permissions（高风险）</option>
+                  </select>
+                </SettingRow>
+
                 <SettingRow label="全局快捷键" desc="点击后按下组合键即可修改">
                   <HotkeyInput
                     value={draft.globalHotkey}
@@ -238,6 +267,14 @@ export default function SettingsDrawer({
                     }
                     onBlur={() => persist({ editorPathOverride: draft.editorPathOverride })}
                     className="h-8 w-[150px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
+                  />
+                </SettingRow>
+
+                <SettingRow label="本机磁盘搜索" desc="开启后会在配置的目录范围内查找未收藏项目">
+                  <Switch
+                    label="本机磁盘搜索"
+                    checked={draft.scanEnabled}
+                    onChange={(value) => update({ scanEnabled: value })}
                   />
                 </SettingRow>
 

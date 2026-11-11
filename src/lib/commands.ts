@@ -57,6 +57,8 @@ export const openInEditor = (path: string, editor?: string) =>
   invoke<OpenResult>("open_in_editor", { path, editor: editor ?? null });
 export const revealInExplorer = (path: string) => invoke<void>("reveal_in_explorer", { path });
 export const detectEditors = () => invoke<EditorInfo[]>("detect_editors");
+export const openCliAgent = (path: string, agent: "codex" | "claude") =>
+  invoke<string>("open_cli_agent", { path, agent });
 
 // ---------------------------------------------------------------------- 设置
 export const getSettings = () => invoke<AppSettings>("get_settings");

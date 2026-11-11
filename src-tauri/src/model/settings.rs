@@ -20,7 +20,12 @@ pub struct AppSettings {
     /// `true` 会附加 `--disable-workspace-trust`，降低安全防护；新安装默认关闭。
     pub trust_folders: bool,
     pub search_roots: Vec<String>,
+    pub scan_enabled: bool,
     pub editor_path_override: Option<String>,
+    /// Codex CLI 的交互式启动策略。
+    pub codex_mode: String,
+    /// Claude Code 的交互式权限策略。
+    pub claude_mode: String,
 }
 
 impl Default for AppSettings {
@@ -34,7 +39,10 @@ impl Default for AppSettings {
             hide_after_open: true,
             trust_folders: false,
             search_roots: default_search_roots(),
+            scan_enabled: true,
             editor_path_override: None,
+            codex_mode: "default".into(),
+            claude_mode: "acceptEdits".into(),
         }
     }
 }

@@ -14,10 +14,16 @@ const SCAN_LIMIT: usize = 60;
 /// 以免卡住 Tauri 的异步运行时。
 #[tauri::command]
 pub async fn scan_folders(state: State<'_, Store>, query: String) -> Result<Vec<String>, String> {
-    let roots = {
+    let (enabled, roots) = {
         let data = state.data();
-        data.settings.search_roots.clone()
+        (
+            data.settings.scan_enabled,
+            data.settings.search_roots.clone(),
+        )
     };
+    if !enabled {
+        return Ok(Vec::new());
+    }
 
     tauri::async_runtime::spawn_blocking(move || Ok(scanner::scan(&roots, &query, SCAN_LIMIT)))
         .await

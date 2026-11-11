@@ -63,13 +63,26 @@ pub fn open_in_editor(
     })
 }
 
+/// 在项目目录中交互式启动 Codex CLI 或 Claude Code。
+#[tauri::command]
+pub fn open_cli_agent(state: State<Store>, path: String, agent: String) -> Result<String, String> {
+    let mode = {
+        let data = state.data();
+        match agent.as_str() {
+            "codex" => data.settings.codex_mode.clone(),
+            "claude" => data.settings.claude_mode.clone(),
+            _ => return Err(format!("不支持的 CLI 工具: {agent}")),
+        }
+    };
+    editor::open_cli_agent(&path, &agent, &mode)
+}
+
 /// 在资源管理器中选中文件夹。
 #[tauri::command]
 pub fn reveal_in_explorer(path: String) -> Result<(), String> {
     editor::reveal_in_explorer(&path)
 }
 
-/// 探测本机可用编辑器。
 #[tauri::command]
 pub fn detect_editors() -> Vec<EditorInfo> {
     editor::detect_editors()

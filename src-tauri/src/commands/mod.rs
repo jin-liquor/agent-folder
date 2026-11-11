@@ -46,6 +46,7 @@ macro_rules! app_commands {
             $crate::commands::open_in_editor,
             $crate::commands::reveal_in_explorer,
             $crate::commands::detect_editors,
+            $crate::commands::open_cli_agent,
             $crate::commands::scan_folders,
             $crate::commands::get_settings,
             $crate::commands::get_storage_status,

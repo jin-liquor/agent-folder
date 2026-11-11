@@ -30,7 +30,10 @@ export interface AppSettings {
   hideAfterOpen: boolean;
   trustFolders: boolean;
   searchRoots: string[];
+  scanEnabled: boolean;
   editorPathOverride?: string | null;
+  codexMode: "default" | "danger-full-access" | "yolo";
+  claudeMode: "acceptEdits" | "dangerously-skip-permissions";
 }
 
 export interface StorageStatus {
@@ -66,5 +69,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hideAfterOpen: true,
   trustFolders: false,
   searchRoots: [],
+  scanEnabled: true,
   editorPathOverride: null,
+  codexMode: "default",
+  claudeMode: "acceptEdits",
 };

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import * as system from "./lib/system";
-import { revealInExplorer } from "./lib/commands";
+import { openCliAgent, revealInExplorer } from "./lib/commands";
 import { errorText } from "./lib/errors";
 import { queryTokens } from "./lib/search";
 import { baseName } from "./lib/path";
@@ -23,7 +23,7 @@ import Toast from "./components/Toast";
 import ScanResultItem from "./components/ScanResultItem";
 import SectionTitle from "./components/SectionTitle";
 import StorageNotice from "./components/StorageNotice";
-import { PlusIcon, StarIcon } from "./components/Icons";
+import { PlusIcon } from "./components/Icons";
 import {
   useFolderList,
   useKeyboardNav,
@@ -54,7 +54,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [scanMode, setScanMode] = useState(false);
+  const scanMode = settings.scanEnabled;
   const [addOpen, setAddOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -119,6 +119,7 @@ export default function App() {
             : `已打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
         );
         if (settings.hideAfterOpen) void system.hideWindow();
+        setQuery("");
       } catch (error: unknown) {
         toast.show(`打开失败：${errorText(error)}`);
       }
@@ -136,11 +137,26 @@ export default function App() {
             : `已打开 ${path}，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
         );
         if (settings.hideAfterOpen) void system.hideWindow();
+        setQuery("");
       } catch (error: unknown) {
         toast.show(`打开失败：${errorText(error)}`);
       }
     },
     [openPath, settings.hideAfterOpen, toast],
+  );
+
+  const launchAgent = useCallback(
+    async (path: string, agent: "codex" | "claude", name: string) => {
+      try {
+        const command = await openCliAgent(path, agent);
+        toast.show(`${name} 已启动：${command}`);
+        setQuery("");
+        if (settings.hideAfterOpen) void system.hideWindow();
+      } catch (error: unknown) {
+        toast.show(`启动${name}失败：${errorText(error)}`);
+      }
+    },
+    [settings.hideAfterOpen, toast],
   );
 
   const handleRemove = useCallback(
@@ -282,6 +298,8 @@ export default function App() {
           missing={missing.has(row.record.id)}
           highlight={highlight}
           onOpen={() => void openRecord(row.record)}
+          onLaunchCodex={() => void launchAgent(row.record.path, "codex", "Codex")}
+          onLaunchClaude={() => void launchAgent(row.record.path, "claude", "Claude Code")}
           onFavorite={() => void changeFavorite(row.record)}
           onReveal={() =>
             void revealInExplorer(row.record.path)
@@ -349,8 +367,6 @@ export default function App() {
         ref={inputRef}
         value={query}
         onChange={setQuery}
-        scanMode={scanMode}
-        onToggleScan={() => setScanMode((v) => !v)}
         scanning={scanning}
       />
 
@@ -429,12 +445,6 @@ export default function App() {
             >
               清理 {missing.size} 条失效记录
             </button>
-          )}
-          {scanMode && (
-            <span className="flex items-center gap-1">
-              <StarIcon size={11} filled className="text-amber-400" />
-              磁盘扫描已开启
-            </span>
           )}
           <span>{folders.length} 个文件夹</span>
           <span className="kbd">Ctrl K 搜索</span>
