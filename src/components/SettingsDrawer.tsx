@@ -112,7 +112,7 @@ export default function SettingsDrawer({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 350 }}
-            className="absolute top-0 right-0 z-30 flex h-full w-[340px] flex-col border-l border-[var(--glass-border)] bg-[var(--glass-solid)] shadow-2xl"
+            className="absolute top-0 right-0 z-30 flex h-full w-[440px] max-w-[90%] flex-col border-l border-[var(--glass-border)] bg-[var(--glass-solid)] shadow-2xl"
           >
             <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--glass-border)] px-4">
               <button
@@ -152,10 +152,10 @@ export default function SettingsDrawer({
                     value={draft.defaultEditor}
                     aria-label="默认编辑器"
                     onChange={(event) => update({ defaultEditor: event.target.value })}
-                    className="h-8 rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[12px] text-[var(--text-primary)] outline-none"
+                    className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[12px] text-[var(--text-primary)] outline-none"
                   >
                     {editorOptions.map((editor) => (
-                      <option key={editor.id} value={editor.id} disabled={!editor.available}>
+                      <option key={editor.id} value={editor.id} disabled={!editor.available} className="bg-[var(--glass-solid)] text-[var(--text-primary)]">
                         {editor.name}
                         {editor.available ? "" : "（未检测到）"}
                       </option>
@@ -170,11 +170,11 @@ export default function SettingsDrawer({
                     onChange={(event) =>
                       update({ codexMode: event.target.value as AppSettings["codexMode"] })
                     }
-                    className="h-8 max-w-[170px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                    className="h-8 max-w-[170px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
                   >
-                    <option value="default">默认</option>
-                    <option value="danger-full-access">danger-full-access（高风险）</option>
-                    <option value="yolo">yolo（高风险）</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="default">默认</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="danger-full-access">danger-full-access（高风险）</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="yolo">yolo（高风险）</option>
                   </select>
                 </SettingRow>
 
@@ -185,10 +185,10 @@ export default function SettingsDrawer({
                     onChange={(event) =>
                       update({ claudeMode: event.target.value as AppSettings["claudeMode"] })
                     }
-                    className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                    className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
                   >
-                    <option value="acceptEdits">acceptEdits</option>
-                    <option value="dangerously-skip-permissions">dangerously-skip-permissions（高风险）</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="acceptEdits">acceptEdits</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="dangerously-skip-permissions">dangerously-skip-permissions（高风险）</option>
                   </select>
                 </SettingRow>
 
@@ -199,23 +199,25 @@ export default function SettingsDrawer({
                     error={saveError}
                   />
                 </SettingRow>
-                <div className="-mt-2 mb-3 flex items-start justify-between gap-2 text-[10px] leading-relaxed">
-                  <div className="min-w-0 space-y-1">
-                    <div className={hotkeyStatus?.toggleRegistered ? "text-emerald-600" : "text-red-500"}>
-                      主窗口：{hotkeyStatus?.toggleRegistered ? `${hotkeyStatus.toggleHotkey} 已生效` : hotkeyStatus?.toggleError ?? "未注册"}
-                    </div>
-                    <div className={hotkeyStatus?.quickRegistered ? "text-emerald-600" : "text-red-500"}>
-                      快速启动：{hotkeyStatus?.quickRegistered ? `${hotkeyStatus.quickHotkey} 已生效` : hotkeyStatus?.quickError ?? "未注册"}
-                    </div>
-                  </div>
+                <div className="-mt-1 mb-3 ml-auto flex w-[180px] max-w-full flex-col gap-1.5 text-[10px] leading-relaxed">
                   <button
                     type="button"
                     onClick={() => void retryHotkeys()}
                     disabled={retryingHotkeys}
-                    className="shrink-0 rounded-md border border-[var(--glass-border)] px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                    className="self-end rounded-md border border-[var(--glass-border)] px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
                   >
-                    {retryingHotkeys ? "重试中…" : "重试"}
+                    {retryingHotkeys ? "重试中…" : "重试快捷键"}
                   </button>
+                  <div className="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+                    <span className="text-[var(--text-secondary)]">主窗口</span>
+                    <span className={`break-words text-right ${hotkeyStatus?.toggleRegistered ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
+                      {hotkeyStatus?.toggleRegistered ? `${hotkeyStatus.toggleHotkey} 已生效` : hotkeyStatus?.toggleError ?? "未注册"}
+                    </span>
+                    <span className="text-[var(--text-secondary)]">快速启动</span>
+                    <span className={`break-words text-right ${hotkeyStatus?.quickRegistered ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
+                      {hotkeyStatus?.quickRegistered ? `${hotkeyStatus.quickHotkey} 已生效` : hotkeyStatus?.quickError ?? "未注册"}
+                    </span>
+                  </div>
                 </div>
 
                 <SettingRow label="关闭时最小化到托盘" desc="点关闭按钮不退出，仅隐藏窗口">

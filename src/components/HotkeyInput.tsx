@@ -83,7 +83,7 @@ export default function HotkeyInput({ value, onChange, error }: Props) {
   }, [recording, onChange]);
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex w-[180px] max-w-full flex-col items-stretch gap-1">
       <button
         ref={buttonRef}
         type="button"
@@ -92,7 +92,7 @@ export default function HotkeyInput({ value, onChange, error }: Props) {
           setRecording((on) => !on);
           setHint(null);
         }}
-        className={`flex h-8 items-center gap-1 rounded-lg border px-2 transition ${
+        className={`flex min-h-8 w-full items-center justify-end gap-1 rounded-lg border px-2 transition ${
           recording
             ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
             : "border-[var(--glass-border)] hover:border-[var(--text-secondary)]"

@@ -15,6 +15,20 @@ import {
   type StorageStatus,
 } from "../lib/types";
 
+const CODEX_MODES: readonly string[] = ["default", "danger-full-access", "yolo"];
+const CLAUDE_MODES: readonly string[] = ["acceptEdits", "dangerously-skip-permissions"];
+
+function normalizeSettings(settings: AppSettings): AppSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...settings };
+  return {
+    ...merged,
+    codexMode: CODEX_MODES.includes(merged.codexMode) ? merged.codexMode : DEFAULT_SETTINGS.codexMode,
+    claudeMode: CLAUDE_MODES.includes(merged.claudeMode)
+      ? merged.claudeMode
+      : DEFAULT_SETTINGS.claudeMode,
+  };
+}
+
 /** 串行化设置写入，避免连续切换开关时后写覆盖先写。 */
 let settingsWrite: Promise<void> = Promise.resolve();
 
@@ -46,7 +60,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   folders: [],
-  settings: DEFAULT_SETTINGS,
+  settings: normalizeSettings(DEFAULT_SETTINGS),
   editors: [],
   loaded: false,
   missing: new Set<string>(),
@@ -58,7 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       commands.getSettings(),
       commands.getStorageStatus(),
     ]);
-    set({ folders, settings, storageStatus, loaded: true });
+    set({ folders, settings: normalizeSettings(settings), storageStatus, loaded: true });
   },
 
   scanMissing: async () => {

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import * as system from "./lib/system";
-import { openCliAgent, revealInExplorer } from "./lib/commands";
+import { openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
 import { errorText } from "./lib/errors";
 import { queryTokens } from "./lib/search";
 import { baseName } from "./lib/path";
@@ -125,6 +125,25 @@ export default function App() {
       }
     },
     [openPath, settings.hideAfterOpen, toast],
+  );
+
+  const openInVSCode = useCallback(
+    async (record: FolderRecord) => {
+      try {
+        const result = await openInEditor(record.path, "vscode");
+        if (!result.command) throw new Error("Visual Studio Code 没有返回启动结果");
+        toast.show(
+          result.historySaved
+            ? `已在 Visual Studio Code 中打开「${record.name}」`
+            : `已在 Visual Studio Code 中打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+        );
+        if (settings.hideAfterOpen) void system.hideWindow();
+        setQuery("");
+      } catch (error: unknown) {
+        toast.show(`VS Code 打开失败：${errorText(error)}`);
+      }
+    },
+    [settings.hideAfterOpen, toast],
   );
 
   const openScanPath = useCallback(
@@ -298,6 +317,7 @@ export default function App() {
           missing={missing.has(row.record.id)}
           highlight={highlight}
           onOpen={() => void openRecord(row.record)}
+          onOpenVisualStudioCode={() => void openInVSCode(row.record)}
           onLaunchCodex={() => void launchAgent(row.record.path, "codex", "Codex")}
           onLaunchClaude={() => void launchAgent(row.record.path, "claude", "Claude Code")}
           onFavorite={() => void changeFavorite(row.record)}

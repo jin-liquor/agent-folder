@@ -1,6 +1,32 @@
 import type { SVGProps } from "react";
+import { icons as logoSet } from "@iconify-json/logos";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+
+type BrandLogoName = "visual-studio-code" | "openai-icon" | "claude-code";
+
+const BRAND_VIEWBOXES: Record<BrandLogoName, string> = {
+  "visual-studio-code": "0 0 256 254",
+  "openai-icon": "0 0 260 260",
+  "claude-code": "0 0 256 161",
+};
+
+function BrandIcon({ name, size = 18, ...props }: IconProps & { name: BrandLogoName }) {
+  const icon = logoSet.icons[name];
+  return (
+    <svg
+      {...props}
+      width={size}
+      height={size}
+      viewBox={BRAND_VIEWBOXES[name]}
+      preserveAspectRatio="xMidYMid meet"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+      dangerouslySetInnerHTML={{ __html: icon?.body ?? "" }}
+    />
+  );
+}
 
 function base({ size = 18, strokeWidth = 2, ...props }: IconProps) {
   return {
@@ -34,6 +60,14 @@ export const FolderIcon = (p: IconProps) => (
     <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
   </svg>
 );
+
+export const VisualStudioCodeIcon = (p: IconProps) => <BrandIcon {...p} name="visual-studio-code" />;
+
+/** Official OpenAI mark used by Codex. */
+export const CodexIcon = (p: IconProps) => <BrandIcon {...p} name="openai-icon" />;
+
+/** Official Claude Code mark. */
+export const ClaudeIcon = (p: IconProps) => <BrandIcon {...p} name="claude-code" />;
 
 export const CodeIcon = (p: IconProps) => (
   <svg {...base(p)}>

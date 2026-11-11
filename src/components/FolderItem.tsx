@@ -11,6 +11,8 @@ import ActionButton from "./ui/ActionButton";
 import ColorPicker from "./ColorPicker";
 import TagEditor from "./TagEditor";
 import {
+  ClaudeIcon,
+  CodexIcon,
   CopyIcon,
   EditIcon,
   FolderIcon,
@@ -19,6 +21,7 @@ import {
   StarIcon,
   TagIcon,
   TrashIcon,
+  VisualStudioCodeIcon,
 } from "./Icons";
 
 interface Props {
@@ -28,6 +31,7 @@ interface Props {
   missing?: boolean;
   highlight: (text: string) => ReactNode;
   onOpen: () => void;
+  onOpenVisualStudioCode: () => void;
   onLaunchCodex: () => void;
   onLaunchClaude: () => void;
   onFavorite: () => void;
@@ -45,6 +49,7 @@ export default function FolderItem({
   missing = false,
   highlight,
   onOpen,
+  onOpenVisualStudioCode,
   onLaunchCodex,
   onLaunchClaude,
   onFavorite,
@@ -195,11 +200,14 @@ export default function FolderItem({
       </span>
 
       <div className="flex shrink-0 items-center gap-0.5">
+        <ActionButton title="使用 Visual Studio Code 打开" onClick={onOpenVisualStudioCode}>
+          <VisualStudioCodeIcon size={14} />
+        </ActionButton>
         <ActionButton title="启动 Codex" onClick={onLaunchCodex}>
-          <span className="text-[10px] font-semibold">Cx</span>
+          <CodexIcon size={14} />
         </ActionButton>
         <ActionButton title="启动 Claude Code" onClick={onLaunchClaude}>
-          <span className="text-[10px] font-semibold">Cl</span>
+          <ClaudeIcon size={14} />
         </ActionButton>
         <ActionButton title={record.favorite ? "取消收藏" : "收藏"} onClick={onFavorite}>
           <StarIcon size={14} filled={record.favorite} />

@@ -59,8 +59,9 @@ pub fn retry_hotkeys(state: State<Store>, app: AppHandle) -> Result<hotkey::Hotk
 pub fn save_settings(
     app: AppHandle,
     state: State<Store>,
-    settings: AppSettings,
+    mut settings: AppSettings,
 ) -> Result<AppSettings, String> {
+    settings.normalize_cli_modes();
     // 第一步：读取旧值并判断是否需要换快捷键（短暂持锁）。
     let previous = state.data().settings.clone();
     let hotkey_changed = settings.global_hotkey != previous.global_hotkey;

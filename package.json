@@ -16,6 +16,7 @@
     "fmt:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
+    "@iconify-json/logos": "^1.2.19",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-autostart": "^2",
     "@tauri-apps/plugin-clipboard-manager": "^2",

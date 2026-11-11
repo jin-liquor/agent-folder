@@ -28,6 +28,28 @@ pub struct AppSettings {
     pub claude_mode: String,
 }
 
+impl AppSettings {
+    /// Restore safe, supported CLI modes after loading legacy or malformed data.
+    pub fn normalize_cli_modes(&mut self) -> bool {
+        let mut changed = false;
+        if !matches!(
+            self.codex_mode.as_str(),
+            "default" | "danger-full-access" | "yolo"
+        ) {
+            self.codex_mode = "default".into();
+            changed = true;
+        }
+        if !matches!(
+            self.claude_mode.as_str(),
+            "acceptEdits" | "dangerously-skip-permissions"
+        ) {
+            self.claude_mode = "acceptEdits".into();
+            changed = true;
+        }
+        changed
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -50,6 +72,17 @@ impl Default for AppSettings {
 #[cfg(test)]
 mod tests {
     use super::AppSettings;
+
+    #[test]
+    fn invalid_cli_modes_are_normalized() {
+        let mut settings: AppSettings =
+            serde_json::from_str(r#"{"codexMode":"unexpected","claudeMode":""}"#).unwrap();
+
+        assert!(settings.normalize_cli_modes());
+        assert_eq!(settings.codex_mode, "default");
+        assert_eq!(settings.claude_mode, "acceptEdits");
+        assert!(!settings.normalize_cli_modes());
+    }
 
     #[test]
     fn trust_confirmation_is_enabled_by_default() {

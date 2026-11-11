@@ -83,7 +83,8 @@ impl Store {
             status = loaded_status;
         }
 
-        // 旧版本数据没有 schema 版本，这里与 kind 一起补全并落盘。
+        // Repair invalid CLI modes alongside schema and project-kind migrations.
+        let normalized_modes = data.settings.normalize_cli_modes();
         let migrated_schema = migrate_schema(&mut data);
         let backfilled = backfill_kinds(&mut data);
         let store = Self {
@@ -92,7 +93,7 @@ impl Store {
             status: Mutex::new(status),
         };
 
-        if (migrated_schema || backfilled) && !store.status().read_only {
+        if (normalized_modes || migrated_schema || backfilled) && !store.status().read_only {
             if let Err(error) = store.save() {
                 eprintln!("数据格式迁移失败：{error}");
             }
@@ -124,6 +125,7 @@ impl Store {
             return Err("备份数据来自更新版本的应用，当前版本不能安全恢复".into());
         }
         migrate_schema(&mut recovered);
+        recovered.settings.normalize_cli_modes();
         backfill_kinds(&mut recovered);
         let count = recovered.folders.len();
         let json = serde_json::to_string_pretty(&recovered).map_err(|e| e.to_string())?;
@@ -153,11 +155,12 @@ impl Store {
                 .unwrap_or_else(|poisoned| poisoned.into_inner()) = status;
             return Err(warning);
         }
+        let normalized_modes = data.settings.normalize_cli_modes();
         let migrated_schema = migrate_schema(&mut data);
         let backfilled = backfill_kinds(&mut data);
         let count = data.folders.len();
         let mut current = self.data();
-        if migrated_schema || backfilled {
+        if normalized_modes || migrated_schema || backfilled {
             let json = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
             write_atomic(&self.path, json.as_bytes())?;
         }
