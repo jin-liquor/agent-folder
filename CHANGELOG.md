@@ -2,6 +2,16 @@
 
 All notable user-facing changes are recorded here. / 记录面向用户的重要变更。
 
+## [1.0.1] - 2026-11-11
+
+### Added / 新增
+
+- Add a Claude Code default startup mode that launches `claude` without extra arguments; existing saved mode choices remain unchanged. / 新增 Claude Code 默认启动模式，直接运行 `claude` 且不附加参数；用户已保存的启动模式保持不变。
+
+### Fixed / 修复
+
+- Launch Windows npm CLI shims through `cmd.exe` and include the user's npm directory in the child process PATH. / Windows 下通过 `cmd.exe` 启动 npm CLI shim，并将用户 npm 目录加入子进程 PATH。
+
 ## [0.1.0] - 2026-11-10
 
 ### Added / 新增

@@ -16,7 +16,7 @@ import {
 } from "../lib/types";
 
 const CODEX_MODES: readonly string[] = ["default", "danger-full-access", "yolo"];
-const CLAUDE_MODES: readonly string[] = ["acceptEdits", "dangerously-skip-permissions"];
+const CLAUDE_MODES: readonly string[] = ["default", "acceptEdits", "dangerously-skip-permissions"];
 
 function normalizeSettings(settings: AppSettings): AppSettings {
   const merged = { ...DEFAULT_SETTINGS, ...settings };

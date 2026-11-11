@@ -41,9 +41,9 @@ impl AppSettings {
         }
         if !matches!(
             self.claude_mode.as_str(),
-            "acceptEdits" | "dangerously-skip-permissions"
+            "default" | "acceptEdits" | "dangerously-skip-permissions"
         ) {
-            self.claude_mode = "acceptEdits".into();
+            self.claude_mode = "default".into();
             changed = true;
         }
         changed
@@ -64,7 +64,7 @@ impl Default for AppSettings {
             scan_enabled: true,
             editor_path_override: None,
             codex_mode: "default".into(),
-            claude_mode: "acceptEdits".into(),
+            claude_mode: "default".into(),
         }
     }
 }
@@ -80,8 +80,18 @@ mod tests {
 
         assert!(settings.normalize_cli_modes());
         assert_eq!(settings.codex_mode, "default");
-        assert_eq!(settings.claude_mode, "acceptEdits");
+        assert_eq!(settings.claude_mode, "default");
         assert!(!settings.normalize_cli_modes());
+    }
+
+    #[test]
+    fn claude_default_mode_is_supported() {
+        assert_eq!(AppSettings::default().claude_mode, "default");
+
+        let mut settings: AppSettings =
+            serde_json::from_str(r#"{"claudeMode":"default"}"#).unwrap();
+        assert!(!settings.normalize_cli_modes());
+        assert_eq!(settings.claude_mode, "default");
     }
 
     #[test]

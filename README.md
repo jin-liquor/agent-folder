@@ -10,7 +10,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 - Fuzzy search by folder name, path, and tags
 - Browse the directory tree or scan configured roots for projects
 - Open folders with VS Code, VS Code Insiders, Cursor, Windsurf, or File Explorer
-- Launch Codex CLI or Claude Code in the selected folder with configurable permission modes
+- Launch Codex CLI or Claude Code in the selected folder; Claude Code supports a no-argument default mode and configurable permission modes
 - Add tags and colors; identify common project types
 - Stay in the system tray, use global shortcuts, and open the quick-launch palette
 - Import and export local JSON data; history is capped at 500 records while favorites are preserved
@@ -20,7 +20,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The latest release is **v1.0.0**. See [Release Notes](#release-notes) for the changes in this version.
+The latest release is **v1.0.1**. See [Release Notes](#release-notes) for the changes in this version.
 
 ## Installation
 
@@ -60,6 +60,11 @@ Folder records and settings are stored locally at `%APPDATA%\agent-folder\data.j
 If `data.json` cannot be parsed, the app backs up the original file next to it before falling back, and settings shows the backup path together with **Reveal backup**, **Export backup**, **Restore backup**, and **Reload** actions. If creating the backup fails, the app enters read-only protection instead of overwriting your data.
 
 ## Release Notes
+
+### v1.0.1
+
+- Add a Claude Code default startup mode that launches `claude` without extra arguments; existing saved mode choices remain unchanged.
+- Launch Windows npm CLI shims through `cmd.exe` and include the user's npm directory in the child process PATH.
 
 ### v1.0.0
 

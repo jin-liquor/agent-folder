@@ -33,7 +33,7 @@ export interface AppSettings {
   scanEnabled: boolean;
   editorPathOverride?: string | null;
   codexMode: "default" | "danger-full-access" | "yolo";
-  claudeMode: "acceptEdits" | "dangerously-skip-permissions";
+  claudeMode: "default" | "acceptEdits" | "dangerously-skip-permissions";
 }
 
 export interface StorageStatus {
@@ -72,5 +72,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   scanEnabled: true,
   editorPathOverride: null,
   codexMode: "default",
-  claudeMode: "acceptEdits",
+  claudeMode: "default",
 };

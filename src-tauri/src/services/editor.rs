@@ -101,34 +101,21 @@ fn resolve_editor(id: &str, override_path: Option<&str>) -> Option<String> {
         .and_then(|e| e.command)
 }
 
-/// 启动交互式 CLI agent。参数只由受控模式生成，避免把整条 shell 命令交给解释器。
+/// 启动交互式 CLI agent。参数只由受控模式生成，避免拼接用户输入。
 pub fn open_cli_agent(folder: &str, agent: &str, mode: &str) -> Result<String, String> {
     if !PathBuf::from(folder).is_dir() {
         return Err(format!("文件夹不存在: {folder}"));
     }
 
-    let (command, args): (&str, Vec<&str>) = match agent {
-        "codex" => match mode {
-            "default" => ("codex", vec![]),
-            "danger-full-access" => ("codex", vec!["--sandbox", "danger-full-access"]),
-            "yolo" => ("codex", vec!["--yolo"]),
-            _ => return Err(format!("不支持的 Codex 模式: {mode}")),
-        },
-        "claude" => match mode {
-            "acceptEdits" => ("claude", vec!["--permission-mode", "acceptEdits"]),
-            "dangerously-skip-permissions" => ("claude", vec!["--dangerously-skip-permissions"]),
-            _ => return Err(format!("不支持的 Claude Code 模式: {mode}")),
-        },
-        _ => return Err(format!("不支持的 CLI 工具: {agent}")),
-    };
+    let (command, args) = cli_agent_command(agent, mode)?;
 
     let command_line = if args.is_empty() {
         command.to_string()
     } else {
         format!("{command} {}", args.join(" "))
     };
-    let mut process = Command::new(command);
-    process.current_dir(folder).args(&args);
+    let mut process = cli_process(command, &args);
+    process.current_dir(folder);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -139,6 +126,65 @@ pub fn open_cli_agent(folder: &str, agent: &str, mode: &str) -> Result<String, S
         .spawn()
         .map(|_| command_line)
         .map_err(|error| format!("启动 {agent} 失败，请确认命令已安装并位于 PATH：{error}"))
+}
+
+fn cli_agent_command(agent: &str, mode: &str) -> Result<(&'static str, Vec<&'static str>), String> {
+    match agent {
+        "codex" => match mode {
+            "default" => Ok(("codex", vec![])),
+            "danger-full-access" => Ok(("codex", vec!["--sandbox", "danger-full-access"])),
+            "yolo" => Ok(("codex", vec!["--yolo"])),
+            _ => Err(format!("不支持的 Codex 模式: {mode}")),
+        },
+        "claude" => match mode {
+            "default" => Ok(("claude", vec![])),
+            "acceptEdits" => Ok(("claude", vec!["--permission-mode", "acceptEdits"])),
+            "dangerously-skip-permissions" => {
+                Ok(("claude", vec!["--dangerously-skip-permissions"]))
+            }
+            _ => Err(format!("不支持的 Claude Code 模式: {mode}")),
+        },
+        _ => Err(format!("不支持的 CLI 工具: {agent}")),
+    }
+}
+
+/// Windows 的 npm CLI 通常只有 `.cmd`/`.ps1` shim，直接 CreateProcess 不会像 shell 一样解析。
+/// 这里只把固定的命令名和受控参数交给 cmd.exe，不接受用户输入作为命令或参数。
+fn cli_process(command: &str, args: &[&str]) -> Command {
+    #[cfg(windows)]
+    {
+        let mut process = Command::new("cmd.exe");
+        process.args(["/d", "/c", command]).args(args);
+
+        let npm_dir = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .map(|path| path.join("npm"))
+            .or_else(|| {
+                std::env::var_os("USERPROFILE")
+                    .map(PathBuf::from)
+                    .map(|path| path.join("AppData").join("Roaming").join("npm"))
+            });
+        if let Some(npm_dir) = npm_dir.filter(|path| path.is_dir()) {
+            let current_path = std::env::var_os("PATH").unwrap_or_default();
+            let mut paths: Vec<_> = std::env::split_paths(&current_path).collect();
+            let npm_dir_text = npm_dir.to_string_lossy();
+            if !paths
+                .iter()
+                .any(|path| path.to_string_lossy().eq_ignore_ascii_case(&npm_dir_text))
+            {
+                paths.push(npm_dir);
+            }
+            if let Ok(path) = std::env::join_paths(paths) {
+                process.env("PATH", path);
+            }
+        }
+        process
+    }
+
+    #[cfg(not(windows))]
+    {
+        Command::new(command).args(args)
+    }
 }
 
 /// 在编辑器中以新窗口打开文件夹，返回实际使用的命令（用于提示文案）。
@@ -200,4 +246,29 @@ pub fn reveal_in_explorer(path: &str) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod cli_agent_tests {
+    use super::cli_agent_command;
+
+    #[test]
+    fn claude_default_mode_has_no_arguments() {
+        assert_eq!(
+            cli_agent_command("claude", "default").unwrap(),
+            ("claude", vec![])
+        );
+    }
+
+    #[test]
+    fn claude_explicit_modes_keep_their_arguments() {
+        assert_eq!(
+            cli_agent_command("claude", "acceptEdits").unwrap(),
+            ("claude", vec!["--permission-mode", "acceptEdits"])
+        );
+        assert_eq!(
+            cli_agent_command("claude", "dangerously-skip-permissions").unwrap(),
+            ("claude", vec!["--dangerously-skip-permissions"])
+        );
+    }
 }

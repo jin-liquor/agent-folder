@@ -187,6 +187,7 @@ export default function SettingsDrawer({
                     }
                     className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
                   >
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="default">默认</option>
                     <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="acceptEdits">acceptEdits</option>
                     <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="dangerously-skip-permissions">dangerously-skip-permissions（高风险）</option>
                   </select>
