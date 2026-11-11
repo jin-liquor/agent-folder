@@ -20,7 +20,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The latest release is **v1.0.1**. See [Release Notes](#release-notes) for the changes in this version.
+The latest release is **v1.0.1**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
 
 ## Installation
 
@@ -59,34 +59,6 @@ Folder records and settings are stored locally at `%APPDATA%\agent-folder\data.j
 
 If `data.json` cannot be parsed, the app backs up the original file next to it before falling back, and settings shows the backup path together with **Reveal backup**, **Export backup**, **Restore backup**, and **Reload** actions. If creating the backup fails, the app enters read-only protection instead of overwriting your data.
 
-## Release Notes
-
-### v1.0.1
-
-- Add a Claude Code default startup mode that launches `claude` without extra arguments; existing saved mode choices remain unchanged.
-- Launch Windows npm CLI shims through `cmd.exe` and include the user's npm directory in the child process PATH.
-
-### v1.0.0
-
-- Launch Codex CLI and Claude Code directly in the selected folder, with configurable permission modes.
-- Move disk-scan controls into Settings and enforce the scan toggle in both frontend and backend.
-- Prioritize favorites and previously opened folders in search results, then append unsaved scan matches.
-- Clear the search query after opening a folder or launching a CLI agent.
-- Synchronize the application, Tauri, installer, and documentation version to 1.0.0.
-
-### v0.1.1
-
-- Distinguish first launch, read failure, and JSON corruption when loading storage; back up a damaged file before falling back, and enter read-only protection if the backup fails.
-- Add a schema version with migrations, plus a storage warning banner that shows the backup path and recovery actions.
-- Separate the editor-launch result from the history-write result, so an opened folder is never reported as a failed open; a failed history save rolls back in-memory state.
-- Show the real registration status of the main-window and quick-launch hotkeys separately, with the failure reason and a retry button.
-- Make export atomic with temporary-file replacement and rollback; report import results using the counts actually retained after capacity trimming.
-- Stop disabling the VS Code workspace-trust prompt by default for new installs, while preserving previously saved preferences.
-
-### v0.1.0
-
-- First public release.
-
 ## Build from Source
 
 Requires Node.js, pnpm, the Rust toolchain, and the Windows WebView2 Runtime.
@@ -105,7 +77,7 @@ The installer is generated in `src-tauri/target/release/bundle/nsis/`.
 
 ## Developer Documentation
 
-Development rules, architecture notes, release notes, and implementation plans are maintained in the local `AGENT.md` and `Plan/` directory. They are intentionally excluded from Git tracking.
+Development rules, architecture notes, release process, and implementation plans are maintained in the local `AGENT.md` and `Plan/` directory. They are intentionally excluded from Git tracking.
 
 ## License
 
