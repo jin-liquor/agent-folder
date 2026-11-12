@@ -14,8 +14,8 @@ interface Props {
 
 export default function TitleBarButton({ label, onClick, children, danger }: Props) {
   const hover = danger
-    ? "hover:bg-red-500 hover:text-white"
-    : "hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] hover:text-[var(--text-primary)]";
+    ? "hover:bg-[var(--danger)] hover:text-white"
+    : "hover:bg-[var(--hover-subtle)] hover:text-[var(--text-primary)]";
 
   return (
     <button
@@ -23,7 +23,7 @@ export default function TitleBarButton({ label, onClick, children, danger }: Pro
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] transition ${hover}`}
+      className={`flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-secondary)] transition ${hover}`}
     >
       {children}
     </button>

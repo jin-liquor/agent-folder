@@ -2,6 +2,28 @@
 
 All notable user-facing changes are recorded here. / 记录面向用户的重要变更。
 
+## [1.1.0] - 2026-11-12
+
+### Added / 新增
+
+- 常驻磁盘索引：启动时后台构建一次，搜索只读内存，输入不再触发整盘遍历。 / Persistent on-disk folder index: built once in the background, every query is served from memory instead of walking the disk.
+- 快速启动浮窗支持磁盘检索，已保存记录与磁盘命中分组展示，打开后自动进入历史。 / The quick-launch palette now searches the disk index too, groups saved records and disk hits, and records what you open.
+- 快速启动浮窗显示打开方式图标（VS Code / Codex / Claude / 资源管理器），支持 `Ctrl+Enter`、`Ctrl+1`、`Ctrl+2`、`Ctrl+3`。 / Open-with icons in the palette with `Ctrl+Enter`, `Ctrl+1`, `Ctrl+2`, and `Ctrl+3` shortcuts.
+- 设置新增「快速启动默认动作」「显示打开方式图标」，以及磁盘索引状态与重建入口。 / New settings for the palette default action, icon visibility, and an index status row with a rebuild button.
+- 界面改为 GitHub Primer 风格：实底画布、1px 描边、6px 圆角、语义色与黄色命中高亮。 / GitHub Primer visual language: solid canvas, 1px borders, 6px radii, semantic colors, yellow match highlights.
+
+### Improved / 改进
+
+- 磁盘检索改为内存索引匹配，查询从「350 ms 防抖 + 1–7 s 遍历」降到毫秒级。 / Disk search now matches an in-memory index, cutting queries from a 350 ms debounce plus a 1–7 s walk to milliseconds.
+- 跳过 Windows 系统目录（Windows、Program Files、ProgramData、`$Recycle.Bin` 等），大幅减少无效遍历。 / Windows system directories are skipped, removing most wasted traversal.
+- 主窗口搜索增加渲染上限，避免一次命中过多拖慢列表。 / The main window caps rendered search rows so large result sets stay responsive.
+- 中文输入法拼写过程中不再触发查询，避免结果抖动。 / IME composition no longer triggers searches mid-word, removing jitter for Chinese input.
+- 索引缓存与 `data.json` 分离：缓存损坏只重建索引，不影响用户数据。 / The index cache is separate from `data.json`, so a damaged cache never touches user data.
+
+### Fixed / 修复
+
+- 设置页快捷键速查补上 `Ctrl+Shift+Space`。 / Added the missing `Ctrl+Shift+Space` entry to the shortcut reference.
+
 ## [1.0.1] - 2026-11-11
 
 ### Added / 新增

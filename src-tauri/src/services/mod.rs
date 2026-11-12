@@ -4,5 +4,6 @@
 //! （启动进程、遍历磁盘、操作托盘）都收敛在这里，方便单独测试与替换。
 
 pub mod editor;
+pub mod index;
 pub mod project;
 pub mod scanner;

@@ -6,12 +6,16 @@
 //! 3. 保存失败时能回滚内存状态（由调用方决定是否回滚）。
 
 mod data;
+pub mod index_cache;
 mod store;
 
 // `AppData` 供测试与内部使用，非公开 API。
 #[allow(unused_imports)]
 pub use data::AppData;
-pub use store::{StorageStatus, Store};
+pub use store::{data_dir, StorageStatus, Store};
+
+// 索引缓存需要与 `data.json` 相同的原子写入语义，直接复用同一份实现。
+pub(crate) use store::write_atomic;
 
 #[cfg(test)]
 mod tests {

@@ -7,6 +7,6 @@
 
 export { useFolderList } from "./useFolderList";
 export type { Row } from "./useFolderList";
-export { useScanSearch } from "./useScanSearch";
+export { useDiskIndex } from "./useDiskIndex";
 export { useToast } from "./useToast";
 export { useKeyboardNav } from "./useKeyboardNav";

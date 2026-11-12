@@ -17,6 +17,7 @@ import {
 
 const CODEX_MODES: readonly string[] = ["default", "danger-full-access", "yolo"];
 const CLAUDE_MODES: readonly string[] = ["default", "acceptEdits", "dangerously-skip-permissions"];
+const QUICK_ACTIONS: readonly string[] = ["defaultEditor", "vscode", "codex", "claude"];
 
 function normalizeSettings(settings: AppSettings): AppSettings {
   const merged = { ...DEFAULT_SETTINGS, ...settings };
@@ -26,6 +27,9 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     claudeMode: CLAUDE_MODES.includes(merged.claudeMode)
       ? merged.claudeMode
       : DEFAULT_SETTINGS.claudeMode,
+    quickEnterAction: QUICK_ACTIONS.includes(merged.quickEnterAction)
+      ? merged.quickEnterAction
+      : DEFAULT_SETTINGS.quickEnterAction,
   };
 }
 

@@ -8,9 +8,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  CliAgentStatus,
   EditorInfo,
   FolderRecord,
   HotkeyStatus,
+  IndexSearchResult,
+  IndexStatus,
   StorageStatus,
 } from "./types";
 
@@ -57,8 +60,11 @@ export const openInEditor = (path: string, editor?: string) =>
   invoke<OpenResult>("open_in_editor", { path, editor: editor ?? null });
 export const revealInExplorer = (path: string) => invoke<void>("reveal_in_explorer", { path });
 export const detectEditors = () => invoke<EditorInfo[]>("detect_editors");
-export const openCliAgent = (path: string, agent: "codex" | "claude") =>
-  invoke<string>("open_cli_agent", { path, agent });
+/** 探测 Codex / Claude 是否可用，用于浮窗图标禁用态。 */
+export const detectCliAgents = () => invoke<CliAgentStatus>("detect_cli_agents");
+/** `record` 为真时顺带写入打开历史（浮窗打开磁盘结果时使用）。 */
+export const openCliAgent = (path: string, agent: "codex" | "claude", record = false) =>
+  invoke<string>("open_cli_agent", { path, agent, record });
 
 // ---------------------------------------------------------------------- 设置
 export const getSettings = () => invoke<AppSettings>("get_settings");
@@ -72,8 +78,12 @@ export const retryHotkeys = () => invoke<HotkeyStatus>("retry_hotkeys");
 export const saveSettings = (settings: AppSettings) =>
   invoke<AppSettings>("save_settings", { settings });
 
-// -------------------------------------------------------------------- 磁盘扫描
-export const scanFolders = (query: string) => invoke<string[]>("scan_folders", { query });
+// -------------------------------------------------------------------- 磁盘索引
+/** 在常驻索引中检索；不再遍历磁盘。 */
+export const searchIndex = (query: string, limit?: number) =>
+  invoke<IndexSearchResult>("search_index", { query, limit: limit ?? null });
+export const getIndexStatus = () => invoke<IndexStatus>("get_index_status");
+export const rebuildIndex = () => invoke<IndexStatus>("rebuild_index");
 
 // ------------------------------------------------------------------ 导入导出
 /** 导出全部记录，返回写入的记录条数。 */

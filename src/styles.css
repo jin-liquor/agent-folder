@@ -2,25 +2,63 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * 设计令牌对齐 GitHub Primer：
+ * - 实底画布 + 1px 描边，不再使用半透明玻璃层
+ * - 6px 圆角（按钮/输入框/列表行），12px 用于窗口外壳
+ * - 语义色按 GitHub 明暗两套取值
+ */
 :root {
-  --glass-solid: #ffffff;
-  --glass-bg: rgba(248, 250, 252, 0.82);
-  --glass-border: rgba(15, 23, 42, 0.09);
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --accent: #3b82f6;
-  --accent-2: #13a59c;
+  --canvas-default: #ffffff;
+  --canvas-subtle: #f6f8fa;
+  --border-default: #d1d9e0;
+  --border-muted: #e6eaef;
+  --fg-default: #1f2328;
+  --fg-muted: #59636e;
+  --accent-fg: #0969da;
+  --accent-emphasis: #0969da;
+  --accent-subtle: #ddf4ff;
+  --success: #1a7f37;
+  --danger: #d1242f;
+  --attention-subtle: #fff8c5;
+  --hover-subtle: rgba(31, 35, 40, 0.07);
+
+  /* 兼容既有组件使用的旧变量名 */
+  --glass-solid: var(--canvas-default);
+  --glass-bg: var(--canvas-default);
+  --glass-border: var(--border-default);
+  --text-primary: var(--fg-default);
+  --text-secondary: var(--fg-muted);
+  --accent: var(--accent-fg);
+  --accent-2: var(--success);
+  --radius: 6px;
+
   color-scheme: light;
 }
 
 .dark {
-  --glass-solid: #161a22;
-  --glass-bg: rgba(19, 23, 31, 0.86);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --text-primary: #e7ecf4;
-  --text-secondary: #8b96a8;
-  --accent: #4d9fff;
-  --accent-2: #42b9ad;
+  --canvas-default: #0d1117;
+  --canvas-subtle: #151b23;
+  --border-default: #3d444d;
+  --border-muted: #2a3138;
+  --fg-default: #e6edf3;
+  --fg-muted: #9198a1;
+  --accent-fg: #4493f8;
+  --accent-emphasis: #1f6feb;
+  --accent-subtle: rgba(56, 139, 253, 0.15);
+  --success: #3fb950;
+  --danger: #f85149;
+  --attention-subtle: rgba(187, 128, 9, 0.15);
+  --hover-subtle: rgba(177, 186, 196, 0.12);
+
+  --glass-solid: var(--canvas-default);
+  --glass-bg: var(--canvas-default);
+  --glass-border: var(--border-default);
+  --text-primary: var(--fg-default);
+  --text-secondary: var(--fg-muted);
+  --accent: var(--accent-fg);
+  --accent-2: var(--success);
+
   color-scheme: dark;
 }
 
@@ -35,9 +73,10 @@ body {
   margin: 0;
   background: transparent;
   color: var(--text-primary);
-  font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", "PingFang SC",
-    "Microsoft YaHei UI", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial,
+    "PingFang SC", "Microsoft YaHei UI", sans-serif;
   font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   user-select: none;
   cursor: default;
@@ -48,54 +87,99 @@ input {
   cursor: text;
 }
 
+/* 窗口外壳：GitHub 风格的实底面板 + 细描边 */
 .window-glass {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
 }
 
-.accent-gradient {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+/* 品牌标记（原渐变块）：GitHub 用纯色方块，不用渐变 */
+.brand-mark {
+  background: var(--accent-emphasis);
+}
+
+/* GitHub Primer 输入框：默认描边，聚焦时蓝色描边 + 3px 光晕 */
+.gh-input {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--canvas-default);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.gh-input:focus-within {
+  border-color: var(--accent-emphasis);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-emphasis) 28%, transparent);
+}
+
+/* GitHub 主按钮 */
+.gh-btn-primary {
+  background: #1f883d;
+  border: 1px solid rgba(31, 35, 40, 0.15);
+  color: #ffffff;
+}
+
+.gh-btn-primary:hover {
+  background: #1a7f37;
+}
+
+.dark .gh-btn-primary {
+  background: #238636;
+}
+
+.dark .gh-btn-primary:hover {
+  background: #2ea043;
 }
 
 .row-hover:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--canvas-subtle);
 }
 
 .row-selected {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: var(--accent-subtle);
 }
 
 .row-selected.row-hover:hover {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  background: var(--accent-subtle);
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-emphasis) 30%, transparent);
 }
 
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  background: var(--border-default);
   border-radius: 8px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  background: var(--fg-muted);
 }
 
 button {
   cursor: pointer;
 }
 
+button:focus-visible {
+  outline: 2px solid var(--accent-emphasis);
+  outline-offset: 1px;
+}
+
+/* 搜索命中：GitHub 用黄色高亮，而不是改文字颜色 */
 mark {
-  background: transparent;
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--attention-subtle);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  font-weight: 500;
 }
 
 .kbd {
@@ -105,10 +189,11 @@ mark {
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
-  border-radius: 5px;
-  border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--canvas-subtle);
+  box-shadow: inset 0 -1px 0 var(--border-muted);
+  color: var(--fg-muted);
   font-size: 11px;
   font-family: inherit;
   line-height: 1;

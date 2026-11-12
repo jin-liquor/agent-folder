@@ -8,11 +8,13 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 - Pin favorite folders and sort by recent usage
 - Fuzzy search by folder name, path, and tags
-- Browse the directory tree or scan configured roots for projects
+- Browse the directory tree; disk search runs on a persistent index, so typing searches the whole disk instantly
+- The quick-launch palette searches saved records and disk folders together, grouped by source
+- Pick VS Code, Codex, Claude Code, or File Explorer directly from a palette row
 - Open folders with VS Code, VS Code Insiders, Cursor, Windsurf, or File Explorer
 - Launch Codex CLI or Claude Code in the selected folder; Claude Code supports a no-argument default mode and configurable permission modes
 - Add tags and colors; identify common project types
-- Stay in the system tray, use global shortcuts, and open the quick-launch palette
+- Stay in the system tray, use global shortcuts, and open the quick-launch palette with configurable open-with icons and default action
 - Import and export local JSON data; history is capped at 500 records while favorites are preserved
 - Storage safety: a damaged `data.json` is backed up before anything else happens, and a read-only protection mode prevents silent overwrites when the backup itself fails
 - Per-hotkey registration status in settings, with a retry button, so a shortcut conflict is visible instead of failing silently
@@ -20,7 +22,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The latest release is **v1.0.1**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
+The latest release is **v1.1.0**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
 
 ## Installation
 
@@ -31,7 +33,7 @@ Requirements: Windows 10 or later and the Microsoft Edge WebView2 Runtime (usual
 ## Quick Start
 
 1. Launch Agent Folder.
-2. Choose **Add Folder** to browse, or use **Disk Scan** to search for a project.
+2. Choose **Add Folder** to browse, or just type a keyword to search the indexed disk folders.
 3. Select a project and press `Enter` to open it with the current default editor.
 4. Favorite frequently used folders and search them later from the main window or quick-launch palette.
 
@@ -50,6 +52,9 @@ If a project is outside the default scan roots, add its parent directory in **Se
 | `Esc` | Close a panel or clear search |
 | `Ctrl+Alt+V` | Show or hide the main window; configurable in settings |
 | `Ctrl+Shift+Space` | Show or hide the quick-launch palette |
+| `Ctrl+Enter` | Palette: open the selection in VS Code |
+| `Ctrl+1` / `Ctrl+2` | Palette: launch Codex / Claude Code |
+| `Ctrl+3` | Palette: reveal in File Explorer |
 
 The title-bar minimize button hides the app to the tray. The close button follows the **Minimize to tray on close** setting. To exit completely, right-click the tray icon and choose **Quit**.
 

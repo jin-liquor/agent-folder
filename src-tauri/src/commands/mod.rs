@@ -5,7 +5,7 @@
 //! - [`folders`]：文件夹记录的增删改查
 //! - [`launcher`]：打开文件夹 / 定位 / 编辑器探测
 //! - [`settings`]：设置读取与保存
-//! - [`search`]：磁盘扫描
+//! - [`search`]：磁盘索引与扫描
 //! - [`portable`]：导入导出
 
 mod browse;
@@ -46,8 +46,12 @@ macro_rules! app_commands {
             $crate::commands::open_in_editor,
             $crate::commands::reveal_in_explorer,
             $crate::commands::detect_editors,
+            $crate::commands::detect_cli_agents,
             $crate::commands::open_cli_agent,
             $crate::commands::scan_folders,
+            $crate::commands::search_index,
+            $crate::commands::get_index_status,
+            $crate::commands::rebuild_index,
             $crate::commands::get_settings,
             $crate::commands::get_storage_status,
             $crate::commands::recover_storage_backup,

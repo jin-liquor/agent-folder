@@ -10,7 +10,6 @@ import * as system from "./lib/system";
 import { openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
 import { errorText } from "./lib/errors";
 import { queryTokens } from "./lib/search";
-import { baseName } from "./lib/path";
 import { useAppStore, applyTheme } from "./stores/useAppStore";
 import type { FolderRecord } from "./lib/types";
 import TitleBar from "./components/TitleBar";
@@ -25,9 +24,9 @@ import SectionTitle from "./components/SectionTitle";
 import StorageNotice from "./components/StorageNotice";
 import { PlusIcon } from "./components/Icons";
 import {
+  useDiskIndex,
   useFolderList,
   useKeyboardNav,
-  useScanSearch,
   useToast,
   type Row,
 } from "./hooks";
@@ -61,12 +60,12 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
-  const { results: scanResults, scanning } = useScanSearch(query, scanMode);
+  const { hits: diskHits, searching: diskSearching } = useDiskIndex(query, scanMode, 40);
   const { rows, searching } = useFolderList({
     folders,
     query,
     scanMode,
-    scanResults,
+    diskHits,
   });
 
   // 首次加载：读取数据并应用主题。
@@ -286,7 +285,7 @@ export default function App() {
     onSelect: setSelected,
     onOpen: (row) => {
       if (row.kind === "record") void openRecord(row.record);
-      else void openScanPath(row.path);
+      else void openScanPath(row.hit.path);
     },
     onFavorite: (row) => {
       if (row.kind === "record") void changeFavorite(row.record);
@@ -341,12 +340,12 @@ export default function App() {
     }
     return (
       <ScanResultItem
-        key={`scan-${row.path}`}
-        path={row.path}
-        name={baseName(row.path)}
+        key={`disk-${row.hit.path}`}
+        path={row.hit.path}
+        name={row.hit.name}
         selected={index === selected}
         highlight={highlight}
-        onOpen={() => void openScanPath(row.path)}
+        onOpen={() => void openScanPath(row.hit.path)}
       />
     );
   };
@@ -387,7 +386,7 @@ export default function App() {
         ref={inputRef}
         value={query}
         onChange={setQuery}
-        scanning={scanning}
+        scanning={diskSearching}
       />
 
       <div className="flex-1 overflow-y-auto pb-2">
@@ -442,10 +441,10 @@ export default function App() {
         )}
       </div>
 
-      <div className="flex h-12 shrink-0 items-center justify-between border-t border-[var(--glass-border)] px-4">
+      <div className="flex h-12 shrink-0 items-center justify-between border-t border-[var(--glass-border)] bg-[var(--canvas-subtle)] px-4">
         <button
           onClick={() => setAddOpen(true)}
-          className="flex items-center gap-1.5 rounded-xl border border-[var(--glass-border)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          className="flex items-center gap-1.5 rounded-md border border-[var(--glass-border)] bg-[var(--canvas-default)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
           <PlusIcon size={13} />
           添加文件夹
@@ -461,12 +460,12 @@ export default function App() {
                   .then((n) => toast.show(`已清理 ${n} 条失效记录`))
                   .catch((error: unknown) => toast.show(`清理失败：${errorText(error)}`));
               }}
-              className="flex items-center gap-1 rounded-md border border-red-500/40 px-2 py-1 text-red-500 transition hover:bg-red-500/10"
+              className="flex items-center gap-1 rounded-md border border-[var(--danger)]/40 px-2 py-1 text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
             >
               清理 {missing.size} 条失效记录
             </button>
           )}
-          <span>{folders.length} 个文件夹</span>
+          <span>{searching ? `${rows.length} 个结果` : `${folders.length} 个文件夹`}</span>
           <span className="kbd">Ctrl K 搜索</span>
         </div>
       </div>

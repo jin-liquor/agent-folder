@@ -26,10 +26,18 @@ pub struct AppSettings {
     pub codex_mode: String,
     /// Claude Code 的交互式权限策略。
     pub claude_mode: String,
+    /// 快速启动浮窗中按 `Enter` 的默认动作。
+    ///
+    /// 取值：`defaultEditor` | `vscode` | `codex` | `claude`。
+    /// 默认仍是「默认编辑器」，不改变已有用户的操作习惯。
+    pub quick_enter_action: String,
+    /// 是否在快速启动结果行右侧显示打开方式图标。
+    pub quick_open_with: bool,
 }
 
 impl AppSettings {
-    /// Restore safe, supported CLI modes after loading legacy or malformed data.
+    /// Restore safe, supported CLI modes and quick-launch action after loading
+    /// legacy or malformed data.
     pub fn normalize_cli_modes(&mut self) -> bool {
         let mut changed = false;
         if !matches!(
@@ -44,6 +52,13 @@ impl AppSettings {
             "default" | "acceptEdits" | "dangerously-skip-permissions"
         ) {
             self.claude_mode = "default".into();
+            changed = true;
+        }
+        if !matches!(
+            self.quick_enter_action.as_str(),
+            "defaultEditor" | "vscode" | "codex" | "claude"
+        ) {
+            self.quick_enter_action = "defaultEditor".into();
             changed = true;
         }
         changed
@@ -65,6 +80,8 @@ impl Default for AppSettings {
             editor_path_override: None,
             codex_mode: "default".into(),
             claude_mode: "default".into(),
+            quick_enter_action: "defaultEditor".into(),
+            quick_open_with: true,
         }
     }
 }
@@ -92,6 +109,23 @@ mod tests {
             serde_json::from_str(r#"{"claudeMode":"default"}"#).unwrap();
         assert!(!settings.normalize_cli_modes());
         assert_eq!(settings.claude_mode, "default");
+    }
+
+    #[test]
+    fn unknown_quick_action_falls_back_to_default_editor() {
+        let mut settings: AppSettings =
+            serde_json::from_str(r#"{"quickEnterAction":"sublime"}"#).unwrap();
+        assert!(settings.normalize_cli_modes(), "非法动作应被纠正");
+        assert_eq!(settings.quick_enter_action, "defaultEditor");
+
+        let defaults = AppSettings::default();
+        assert_eq!(defaults.quick_enter_action, "defaultEditor");
+        assert!(defaults.quick_open_with, "打开方式图标默认显示");
+
+        // 旧版本数据缺少新字段时必须补默认值，而不是报错。
+        let legacy: AppSettings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert_eq!(legacy.quick_enter_action, "defaultEditor");
+        assert!(legacy.quick_open_with);
     }
 
     #[test]

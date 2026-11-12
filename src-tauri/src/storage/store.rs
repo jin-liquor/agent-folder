@@ -230,7 +230,7 @@ impl Store {
     }
 }
 
-fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
+pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())

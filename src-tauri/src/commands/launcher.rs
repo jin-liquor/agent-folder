@@ -1,10 +1,11 @@
-//! 启动相关命令：打开文件夹、资源管理器定位、编辑器探测。
+//! 启动相关命令：打开文件夹、资源管理器定位、编辑器与 CLI 探测。
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
+use super::folders::mutate_and_save;
 use crate::model::FolderRecord;
-use crate::services::editor::{self, EditorInfo};
+use crate::services::editor::{self, CliAgentStatus, EditorInfo};
 use crate::storage::Store;
 use crate::system::tray;
 
@@ -64,8 +65,18 @@ pub fn open_in_editor(
 }
 
 /// 在项目目录中交互式启动 Codex CLI 或 Claude Code。
+///
+/// `record` 为 `true` 时顺带把该目录写入打开历史——快速启动浮窗里打开的
+/// 磁盘结果默认走这条路径，保证「用过的文件夹一定会出现在列表里」。
+/// 记录失败不会把启动成功改判为失败，只写 stderr，避免误导用户重复点击。
 #[tauri::command]
-pub fn open_cli_agent(state: State<Store>, path: String, agent: String) -> Result<String, String> {
+pub fn open_cli_agent(
+    app: AppHandle,
+    state: State<Store>,
+    path: String,
+    agent: String,
+    record: Option<bool>,
+) -> Result<String, String> {
     let mode = {
         let data = state.data();
         match agent.as_str() {
@@ -74,7 +85,17 @@ pub fn open_cli_agent(state: State<Store>, path: String, agent: String) -> Resul
             _ => return Err(format!("不支持的 CLI 工具: {agent}")),
         }
     };
-    editor::open_cli_agent(&path, &agent, &mode)
+
+    let command = editor::open_cli_agent(&path, &agent, &mode)?;
+
+    if record.unwrap_or(false) {
+        match mutate_and_save(&state, |data| Ok(data.upsert(&path))) {
+            Ok(_) => tray::rebuild_menu(&app),
+            Err(error) => eprintln!("{agent} 已启动，但历史记录保存失败：{error}"),
+        }
+    }
+
+    Ok(command)
 }
 
 /// 在资源管理器中选中文件夹。
@@ -86,4 +107,10 @@ pub fn reveal_in_explorer(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn detect_editors() -> Vec<EditorInfo> {
     editor::detect_editors()
+}
+
+/// 探测 Codex / Claude 命令是否可用，用于快速启动图标禁用态。
+#[tauri::command]
+pub fn detect_cli_agents() -> CliAgentStatus {
+    editor::detect_cli_agents()
 }

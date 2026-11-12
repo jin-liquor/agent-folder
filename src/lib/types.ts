@@ -20,6 +20,43 @@ export interface FolderRecord {
   kind?: string | null;
 }
 
+/** 磁盘索引的一次命中。 */
+export interface SearchHit {
+  path: string;
+  name: string;
+  /** 相对扫描根的层级，越浅越优先。 */
+  depth: number;
+  /** 相关性分数，由后端计算。 */
+  score: number;
+}
+
+/** 索引运行状态。 */
+export interface IndexStatus {
+  ready: boolean;
+  building: boolean;
+  entries: number;
+  scanned: number;
+  builtAt: number;
+  roots: string[];
+  truncated: boolean;
+  warnings: string[];
+  error?: string | null;
+}
+
+/** 索引查询结果（带状态，避免把「未就绪」误读成「没有」）。 */
+export interface IndexSearchResult {
+  ready: boolean;
+  building: boolean;
+  scanned: number;
+  entries: number;
+  hits: SearchHit[];
+  truncated: boolean;
+  warnings: string[];
+}
+
+/** 快速启动浮窗中按 Enter 的默认动作。 */
+export type QuickEnterAction = "defaultEditor" | "vscode" | "codex" | "claude";
+
 /** 用户设置。 */
 export interface AppSettings {
   theme: "dark" | "light" | "system";
@@ -34,6 +71,14 @@ export interface AppSettings {
   editorPathOverride?: string | null;
   codexMode: "default" | "danger-full-access" | "yolo";
   claudeMode: "default" | "acceptEdits" | "dangerously-skip-permissions";
+  quickEnterAction: QuickEnterAction;
+  quickOpenWith: boolean;
+}
+
+/** CLI 工具可用性。 */
+export interface CliAgentStatus {
+  codex: boolean;
+  claude: boolean;
 }
 
 export interface StorageStatus {
@@ -73,4 +118,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   editorPathOverride: null,
   codexMode: "default",
   claudeMode: "default",
+  quickEnterAction: "defaultEditor",
+  quickOpenWith: true,
 };

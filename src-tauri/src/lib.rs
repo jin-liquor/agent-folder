@@ -30,6 +30,7 @@ const TRAY_SETUP_DELAY_MS: u64 = 500;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let store = Store::load();
+    let index = services::index::IndexStore::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -40,9 +41,12 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(store)
+        .manage(index)
         .invoke_handler(crate::app_commands!())
         .setup(|app| {
             setup_tray_deferred(app.handle().clone());
+            // 先装载缓存再后台重建：快速启动窗口首次打开即可搜索。
+            commands::bootstrap_index(app.handle().clone());
 
             let hotkey = {
                 let store = app.state::<Store>();

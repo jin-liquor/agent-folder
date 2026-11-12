@@ -18,6 +18,39 @@ pub struct EditorInfo {
     pub command: Option<String>,
 }
 
+/// 交互式 CLI 工具的可用性，用于快速启动浮窗的图标禁用态。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CliAgentStatus {
+    pub codex: bool,
+    pub claude: bool,
+}
+
+/// 判断某个命令是否在 PATH 中可用。
+///
+/// Windows 的 npm 全局命令通常是 `.cmd`/`.ps1` shim，`where.exe` 能正确识别，
+/// 因此这里不直接尝试 `Command::new(name)`。
+fn command_available(name: &str) -> bool {
+    #[cfg(windows)]
+    let finder = "where.exe";
+    #[cfg(not(windows))]
+    let finder = "which";
+
+    Command::new(finder)
+        .arg(name)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// 探测 Codex 与 Claude Code 是否已安装。
+pub fn detect_cli_agents() -> CliAgentStatus {
+    CliAgentStatus {
+        codex: command_available("codex"),
+        claude: command_available("claude"),
+    }
+}
+
 /// 已支持的编辑器清单：`(id, 展示名, 可执行文件候选路径)`。
 ///
 /// 候选路径按优先级排列，命中第一个存在的即可。

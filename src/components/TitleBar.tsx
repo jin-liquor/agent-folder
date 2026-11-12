@@ -7,14 +7,14 @@ import TitleBarButton from "./ui/TitleBarButton";
 
 export default function TitleBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between pl-4 pr-1">
+    <div className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--glass-border)] bg-[var(--canvas-subtle)] pl-3 pr-1">
       <div
         className="flex h-full flex-1 items-center gap-2.5"
         onMouseDown={(event) => {
           if (event.button === 0) void system.startDragging();
         }}
       >
-        <div className="accent-gradient flex h-5.5 w-5.5 items-center justify-center rounded-lg shadow-sm">
+        <div className="brand-mark flex h-5 w-5 items-center justify-center rounded-md">
           <svg
             width="12"
             height="12"

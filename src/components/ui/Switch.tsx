@@ -20,7 +20,7 @@ export default function Switch({ checked, onChange, disabled, label }: Props) {
       onClick={() => onChange(!checked)}
       className={`relative h-[22px] w-[40px] shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         checked
-          ? "bg-[var(--accent)]"
+          ? "bg-[var(--success)]"
           : "bg-[color-mix(in_srgb,var(--text-primary)_18%,transparent)]"
       }`}
     >

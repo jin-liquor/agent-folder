@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { errorText } from "../lib/errors";
 import * as commands from "../lib/commands";
-import type { AppSettings, EditorInfo, HotkeyStatus } from "../lib/types";
+import type { AppSettings, EditorInfo, HotkeyStatus, IndexStatus } from "../lib/types";
 import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./Icons";
 import SettingRow from "./ui/SettingRow";
 import Switch from "./ui/Switch";
@@ -30,7 +30,15 @@ const SHORTCUTS: [string, string][] = [
   ["Enter", "在编辑器中打开"],
   ["Ctrl D", "收藏 / 取消收藏"],
   ["Delete", "移除记录"],
+  ["Ctrl Shift Space", "显示 / 隐藏快速启动浮窗"],
 ];
+
+/** 把后端的原始快捷键错误压成一行可读文案（完整原因放 title）。 */
+function hotkeyErrorText(error?: string | null): string {
+  if (!error) return "未注册";
+  if (/already registered/i.test(error)) return "已被其他程序占用";
+  return error.length > 28 ? `${error.slice(0, 28)}…` : error;
+}
 
 /** 编辑器列表为空时的兜底项，避免下拉框空白。 */
 const FALLBACK_EDITORS: EditorInfo[] = [
@@ -55,12 +63,15 @@ export default function SettingsDrawer({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hotkeyStatus, setHotkeyStatus] = useState<HotkeyStatus | null>(null);
   const [retryingHotkeys, setRetryingHotkeys] = useState(false);
+  const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  const [indexBusy, setIndexBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setDraft(settings);
     setSaveError(null);
     void commands.getHotkeyStatus().then(setHotkeyStatus).catch(() => setHotkeyStatus(null));
+    void commands.getIndexStatus().then(setIndexStatus).catch(() => setIndexStatus(null));
     if (editors.length === 0) void refreshEditors();
     // 仅在打开时同步草稿，避免保存过程中被覆盖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,6 +105,46 @@ export default function SettingsDrawer({
     }
   };
 
+  /** 手动重建磁盘索引，并轮询到构建结束。 */
+  const rebuildIndex = async () => {
+    setIndexBusy(true);
+    try {
+      setIndexStatus(await commands.rebuildIndex());
+      onToast("已开始重建磁盘索引");
+      const timer = window.setInterval(() => {
+        void commands
+          .getIndexStatus()
+          .then((next) => {
+            setIndexStatus(next);
+            if (!next.building) {
+              window.clearInterval(timer);
+              setIndexBusy(false);
+            }
+          })
+          .catch(() => {
+            window.clearInterval(timer);
+            setIndexBusy(false);
+          });
+      }, 1200);
+    } catch (error) {
+      setIndexBusy(false);
+      onToast(`重建索引失败：${errorText(error)}`);
+    }
+  };
+
+  const indexSummary = indexStatus
+    ? indexStatus.error
+      ? `失败：${indexStatus.error}`
+      : indexStatus.building
+        ? `正在建立 · 已扫描 ${indexStatus.scanned} 个目录`
+        : indexStatus.ready
+          ? `${indexStatus.entries} 个目录 · ${new Date(indexStatus.builtAt).toLocaleTimeString(
+              "zh-CN",
+              { hour: "2-digit", minute: "2-digit" },
+            )}`
+          : "未就绪"
+    : "读取中…";
+
   const editorOptions = editors.length > 0 ? editors : FALLBACK_EDITORS;
 
   return (
@@ -118,7 +169,7 @@ export default function SettingsDrawer({
               <button
                 onClick={onClose}
                 aria-label="返回"
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)]"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)]"
               >
                 <ArrowLeftIcon size={15} />
               </button>
@@ -135,7 +186,7 @@ export default function SettingsDrawer({
                         title={title}
                         aria-label={title}
                         onClick={() => update({ theme: value })}
-                        className={`flex h-8 w-12 items-center justify-center rounded-lg border transition ${
+                        className={`flex h-8 w-12 items-center justify-center rounded-md border transition ${
                           draft.theme === value
                             ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]"
                             : "border-[var(--glass-border)] text-[var(--text-secondary)] hover:bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)]"
@@ -152,7 +203,7 @@ export default function SettingsDrawer({
                     value={draft.defaultEditor}
                     aria-label="默认编辑器"
                     onChange={(event) => update({ defaultEditor: event.target.value })}
-                    className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[12px] text-[var(--text-primary)] outline-none"
+                    className="h-8 max-w-[190px] rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[12px] text-[var(--text-primary)] outline-none"
                   >
                     {editorOptions.map((editor) => (
                       <option key={editor.id} value={editor.id} disabled={!editor.available} className="bg-[var(--glass-solid)] text-[var(--text-primary)]">
@@ -163,6 +214,38 @@ export default function SettingsDrawer({
                   </select>
                 </SettingRow>
 
+                <SettingRow
+                  label="快速启动默认动作"
+                  desc="浮窗里按 Enter 执行的动作；行内图标可随时切换打开方式"
+                >
+                  <select
+                    value={draft.quickEnterAction}
+                    aria-label="快速启动默认动作"
+                    onChange={(event) =>
+                      update({
+                        quickEnterAction: event.target.value as AppSettings["quickEnterAction"],
+                      })
+                    }
+                    className="h-8 max-w-[170px] rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                  >
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="defaultEditor">跟随默认编辑器</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="vscode">Visual Studio Code</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="codex">Codex</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="claude">Claude Code</option>
+                  </select>
+                </SettingRow>
+
+                <SettingRow
+                  label="显示打开方式图标"
+                  desc="在浮窗结果行右侧显示 VS Code / Codex / Claude 图标"
+                >
+                  <Switch
+                    label="显示打开方式图标"
+                    checked={draft.quickOpenWith}
+                    onChange={(value) => update({ quickOpenWith: value })}
+                  />
+                </SettingRow>
+
                 <SettingRow label="Codex CLI 启动模式" desc="在项目目录打开交互式 Codex 会话">
                   <select
                     value={draft.codexMode}
@@ -170,7 +253,7 @@ export default function SettingsDrawer({
                     onChange={(event) =>
                       update({ codexMode: event.target.value as AppSettings["codexMode"] })
                     }
-                    className="h-8 max-w-[170px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                    className="h-8 max-w-[170px] rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
                   >
                     <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="default">默认</option>
                     <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="danger-full-access">danger-full-access（高风险）</option>
@@ -185,7 +268,7 @@ export default function SettingsDrawer({
                     onChange={(event) =>
                       update({ claudeMode: event.target.value as AppSettings["claudeMode"] })
                     }
-                    className="h-8 max-w-[190px] rounded-lg border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
+                    className="h-8 max-w-[190px] rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
                   >
                     <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="default">默认</option>
                     <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="acceptEdits">acceptEdits</option>
@@ -211,12 +294,22 @@ export default function SettingsDrawer({
                   </button>
                   <div className="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
                     <span className="text-[var(--text-secondary)]">主窗口</span>
-                    <span className={`break-words text-right ${hotkeyStatus?.toggleRegistered ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
-                      {hotkeyStatus?.toggleRegistered ? `${hotkeyStatus.toggleHotkey} 已生效` : hotkeyStatus?.toggleError ?? "未注册"}
+                    <span
+                      title={hotkeyStatus?.toggleError ?? undefined}
+                      className={`truncate text-right ${hotkeyStatus?.toggleRegistered ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                    >
+                      {hotkeyStatus?.toggleRegistered
+                        ? `${hotkeyStatus.toggleHotkey} 已生效`
+                        : hotkeyErrorText(hotkeyStatus?.toggleError)}
                     </span>
                     <span className="text-[var(--text-secondary)]">快速启动</span>
-                    <span className={`break-words text-right ${hotkeyStatus?.quickRegistered ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
-                      {hotkeyStatus?.quickRegistered ? `${hotkeyStatus.quickHotkey} 已生效` : hotkeyStatus?.quickError ?? "未注册"}
+                    <span
+                      title={hotkeyStatus?.quickError ?? undefined}
+                      className={`truncate text-right ${hotkeyStatus?.quickRegistered ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                    >
+                      {hotkeyStatus?.quickRegistered
+                        ? `${hotkeyStatus.quickHotkey} 已生效`
+                        : hotkeyErrorText(hotkeyStatus?.quickError)}
                     </span>
                   </div>
                 </div>
@@ -269,7 +362,7 @@ export default function SettingsDrawer({
                       }))
                     }
                     onBlur={() => persist({ editorPathOverride: draft.editorPathOverride })}
-                    className="h-8 w-[150px] rounded-lg border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
+                    className="h-8 w-[150px] rounded-md border border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
                   />
                 </SettingRow>
 
@@ -279,6 +372,25 @@ export default function SettingsDrawer({
                     checked={draft.scanEnabled}
                     onChange={(value) => update({ scanEnabled: value })}
                   />
+                </SettingRow>
+
+                <SettingRow label="磁盘索引" desc="启动时后台建立一次，之后查询只读内存；目录变动可手动重建">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="max-w-[190px] truncate text-[10px] text-[var(--text-secondary)]"
+                      title={indexSummary}
+                    >
+                      {indexSummary}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void rebuildIndex()}
+                      disabled={indexBusy}
+                      className="rounded-md border border-[var(--glass-border)] px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                    >
+                      {indexBusy ? "重建中…" : "重建"}
+                    </button>
+                  </div>
                 </SettingRow>
 
                 <SettingRow label="磁盘扫描范围" desc="搜不到项目时，先把所在磁盘目录加进来">
@@ -296,13 +408,13 @@ export default function SettingsDrawer({
               {saveError && (
                 <div
                   role="alert"
-                  className="mt-4 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2 text-[11px] leading-relaxed break-words text-red-500"
+                  className="mt-4 rounded-md border border-red-500/30 bg-red-500/8 px-3 py-2 text-[11px] leading-relaxed break-words text-red-500"
                 >
                   保存失败：{saveError}
                 </div>
               )}
 
-              <div className="mt-6 rounded-xl border border-[var(--glass-border)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+              <div className="mt-6 rounded-md border border-[var(--glass-border)] bg-[var(--canvas-subtle)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
                 <div className="mb-1 flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
                   <CheckIcon size={12} className="text-emerald-500" />
                   快捷键速查

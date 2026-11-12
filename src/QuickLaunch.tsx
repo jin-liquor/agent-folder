@@ -2,16 +2,21 @@
  * 快速启动浮窗。
  *
  * 类 Spotlight 的极简界面：输入即搜，回车打开，Esc 关闭。
- * 与主窗口共用同一份数据与打开逻辑，但界面只保留「搜索 + 结果」。
+ * 结果分两段：已保存记录（模糊匹配）→ 磁盘索引命中（去重后）。
+ * 打开方式图标见 [`OpenWithBar`]，快捷键映射与设置项保持同步。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { errorText } from "./lib/errors";
 import { createFolderSearch, hasQuery } from "./lib/search";
 import { shortenPath } from "./lib/path";
+import { excludeKnownPaths, folderPathSet } from "./lib/disk";
 import { projectStyle } from "./lib/project";
+import { useDiskIndex } from "./hooks/useDiskIndex";
 import { useAppStore } from "./stores/useAppStore";
-import type { FolderRecord } from "./lib/types";
+import { detectCliAgents, openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
+import OpenWithBar from "./components/OpenWithBar";
+import type { CliAgentStatus, FolderRecord, QuickEnterAction, SearchHit } from "./lib/types";
 import { SearchIcon } from "./components/Icons";
 
 const quickWindow = () => getCurrentWindow();
@@ -21,18 +26,40 @@ async function dismiss() {
   await quickWindow().hide();
 }
 
+type QuickRow =
+  | { kind: "record"; record: FolderRecord }
+  | { kind: "disk"; hit: SearchHit };
+
+/** 底部提示里的 Enter 文案，跟随设置变化。 */
+const ENTER_LABEL: Record<QuickEnterAction, string> = {
+  defaultEditor: "打开",
+  vscode: "VS Code 打开",
+  codex: "启动 Codex",
+  claude: "启动 Claude",
+};
+
 export default function QuickLaunch() {
-  const { folders, loaded, load, openPath } = useAppStore();
+  const { folders, settings, loaded, load, openPath } = useAppStore();
   const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [agents, setAgents] = useState<CliAgentStatus | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
 
   // 首次挂载：加载数据并聚焦输入框。
   useEffect(() => {
     void load().catch(() => {});
     inputRef.current?.focus();
   }, [load]);
+
+  // CLI 可用性只探测一次，用来控制图标禁用态。
+  useEffect(() => {
+    void detectCliAgents()
+      .then(setAgents)
+      .catch(() => setAgents(null));
+  }, []);
 
   /**
    * 每次窗口重新获得焦点时刷新数据。
@@ -53,35 +80,56 @@ export default function QuickLaunch() {
     };
   }, [load]);
 
+  const { hits, status } = useDiskIndex(query, settings.scanEnabled, 6);
   const fuse = useMemo(() => createFolderSearch(folders), [folders]);
 
-  /** 结果：有查询时模糊匹配，否则按最近使用列出前 8 条。 */
-  const results: FolderRecord[] = useMemo(() => {
-    if (hasQuery(query)) {
-      return fuse
-        .search(query.trim())
-        .slice(0, 20)
-        .map((r) => r.item);
+  /** 结果：有查询时模糊匹配 + 磁盘命中，否则按最近使用列出前 8 条。 */
+  const rows: QuickRow[] = useMemo(() => {
+    if (!hasQuery(query)) {
+      return [...folders]
+        .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
+        .slice(0, 8)
+        .map((record) => ({ kind: "record" as const, record }));
     }
-    return [...folders]
-      .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
-      .slice(0, 8);
-  }, [fuse, folders, query]);
+
+    const records: QuickRow[] = fuse
+      .search(query.trim())
+      .slice(0, 12)
+      .map((result) => ({ kind: "record" as const, record: result.item }));
+    const disks: QuickRow[] = excludeKnownPaths(hits, folderPathSet(folders)).map((hit) => ({
+      kind: "disk" as const,
+      hit,
+    }));
+
+    return [...records, ...disks];
+  }, [folders, fuse, hits, query]);
+
+  const firstDiskIndex = rows.findIndex((row) => row.kind === "disk");
 
   useEffect(() => {
     setSelected(0);
   }, [query]);
 
-  const openRecord = useCallback(
-    async (record: FolderRecord) => {
+  /** 按指定方式打开一行；`Enter` 用设置里的默认动作。 */
+  const perform = useCallback(
+    async (row: QuickRow, action: QuickEnterAction) => {
+      const path = row.kind === "record" ? row.record.path : row.hit.path;
       try {
-        const result = await openPath(record.path);
-        if (!result.historySaved) {
-          setError(`已打开，但历史记录未保存：${result.historyError ?? "请稍后重试"}`);
-          return;
+        if (action === "codex" || action === "claude") {
+          // record=true：磁盘结果打开后立即进入历史，下次直接出现在第一段。
+          await openCliAgent(path, action, true);
+        } else {
+          const result =
+            action === "vscode" ? await openInEditor(path, "vscode") : await openPath(path);
+          if (!result.historySaved) {
+            setError(`已打开，但历史记录未保存：${result.historyError ?? "请稍后重试"}`);
+            return;
+          }
         }
-        await dismiss();
+        setError(null);
         setQuery("");
+        setDraft("");
+        await dismiss();
       } catch (err) {
         setError(errorText(err));
       }
@@ -94,18 +142,22 @@ export default function QuickLaunch() {
    *
    * 焦点始终在 input 内，而 WebView 对 Escape 等按键的默认行为
    * 会干扰容器级的 onKeyDown；挂到 window 并显式 preventDefault 更可靠。
+   * `isComposing` 用于避免中文输入法选词时误触发打开。
    */
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+
       if (event.key === "Escape") {
         event.preventDefault();
         setQuery("");
+        setDraft("");
         void dismiss();
         return;
       }
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setSelected((s) => Math.min(s + 1, Math.max(results.length - 1, 0)));
+        setSelected((s) => Math.min(s + 1, Math.max(rows.length - 1, 0)));
         return;
       }
       if (event.key === "ArrowUp") {
@@ -113,29 +165,56 @@ export default function QuickLaunch() {
         setSelected((s) => Math.max(s - 1, 0));
         return;
       }
+
+      const target = rows[selected];
       if (event.key === "Enter") {
         event.preventDefault();
-        const target = results[selected];
-        if (target) void openRecord(target);
+        if (!target) return;
+        void perform(target, event.ctrlKey ? "vscode" : settings.quickEnterAction);
+        return;
+      }
+
+      if (!event.ctrlKey || !target) return;
+      if (event.key === "1") {
+        event.preventDefault();
+        void perform(target, "codex");
+      } else if (event.key === "2") {
+        event.preventDefault();
+        void perform(target, "claude");
+      } else if (event.key === "3") {
+        event.preventDefault();
+        const path = target.kind === "record" ? target.record.path : target.hit.path;
+        void revealInExplorer(path).catch((err: unknown) => setError(errorText(err)));
       }
     };
 
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [results, selected, openRecord]);
+  }, [rows, selected, perform, settings.quickEnterAction]);
+
+  const showIcons = settings.quickOpenWith;
 
   return (
     <div className="window-glass flex h-full flex-col overflow-hidden rounded-xl">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 px-4">
-        <SearchIcon size={16} className="shrink-0 text-[var(--text-secondary)]" />
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-[var(--glass-border)] px-3">
+        <SearchIcon size={15} className="shrink-0 text-[var(--text-secondary)]" />
         <input
           ref={inputRef}
-          value={query}
+          value={draft}
           onChange={(event) => {
-            setQuery(event.target.value);
+            setDraft(event.target.value);
+            // 输入法拼写过程中不触发查询，避免拼音串抖动。
+            if (!composing.current) setQuery(event.target.value);
             setError(null);
           }}
-          placeholder="搜索文件夹…"
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={(event) => {
+            composing.current = false;
+            setQuery(event.currentTarget.value);
+          }}
+          placeholder="搜索文件夹，或直接搜整盘…"
           aria-label="快速搜索文件夹"
           spellCheck={false}
           className="h-full flex-1 bg-transparent text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
@@ -143,63 +222,117 @@ export default function QuickLaunch() {
         <span className="kbd shrink-0">Esc</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-1">
+      {settings.scanEnabled && status && !status.ready && status.building && (
+        <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--glass-border)] bg-[var(--canvas-subtle)] px-3 text-[10px] text-[var(--text-secondary)]">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+          正在建立磁盘索引 · 已扫描 {status.scanned} 个目录
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto py-1">
         {!loaded ? (
           <div className="flex h-full items-center justify-center">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
           </div>
-        ) : results.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[12px] text-[var(--text-secondary)]">
-            {hasQuery(query) ? `没有匹配「${query}」的文件夹` : "还没有记录，先在主界面添加"}
+        ) : rows.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center text-[12px] text-[var(--text-secondary)]">
+            {hasQuery(query) ? (
+              <>
+                <span>没有匹配「{query}」的文件夹</span>
+                {settings.scanEnabled && status && !status.ready && (
+                  <span className="text-[10px]">磁盘索引尚未就绪，稍候再试</span>
+                )}
+              </>
+            ) : (
+              <span>还没有记录，先在主界面添加</span>
+            )}
           </div>
         ) : (
-          results.map((record, index) => {
-            const project = projectStyle(record.kind);
+          rows.map((row, index) => {
+            const isRecord = row.kind === "record";
+            const name = isRecord ? row.record.name : row.hit.name;
+            const path = isRecord ? row.record.path : row.hit.path;
+            const color = isRecord ? (row.record.color ?? "var(--accent)") : "var(--success)";
+            const project = isRecord ? projectStyle(row.record.kind) : null;
+
             return (
-              <div
-                key={record.id}
-                onClick={() => void openRecord(record)}
-                onMouseEnter={() => setSelected(index)}
-                className={`mx-2 flex h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 transition-colors ${
-                  index === selected ? "row-selected" : "row-hover"
-                }`}
-              >
-                <span
-                  className="h-6 w-1 shrink-0 rounded-full"
-                  style={{ background: record.color ?? "var(--accent)" }}
-                />
-                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--text-primary)]">
-                  {record.name}
-                </span>
-                {project && (
-                  <span
-                    className="shrink-0 rounded border px-1 py-px text-[9px] leading-[13px]"
-                    style={{
-                      color: project.color,
-                      borderColor: `color-mix(in srgb, ${project.color} 45%, transparent)`,
-                    }}
-                  >
-                    {project.label}
-                  </span>
+              <Fragment key={isRecord ? row.record.id : `disk-${row.hit.path}`}>
+                {index === firstDiskIndex && (
+                  <div className="px-4 pt-2 pb-1 text-[10px] font-semibold tracking-wide text-[var(--text-secondary)] uppercase">
+                    磁盘 · {rows.length - firstDiskIndex} 个命中
+                  </div>
                 )}
-                <span className="shrink-0 truncate text-[11px] text-[var(--text-secondary)] opacity-70">
-                  {shortenPath(record.path, 34)}
-                </span>
-              </div>
+                <div
+                  onClick={() => void perform(row, settings.quickEnterAction)}
+                  onMouseEnter={() => setSelected(index)}
+                  className={`group mx-2 flex h-11 cursor-pointer items-center gap-2.5 rounded-md px-2.5 transition-colors ${
+                    index === selected ? "row-selected" : "row-hover"
+                  }`}
+                >
+                  <span
+                    className="h-6 w-[3px] shrink-0 rounded-full"
+                    style={{ background: color }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--text-primary)]">
+                    {name}
+                  </span>
+                  {!isRecord && (
+                    <span className="shrink-0 rounded-md border border-[var(--glass-border)] px-1 py-px text-[9px] leading-[13px] text-[var(--text-secondary)]">
+                      磁盘
+                    </span>
+                  )}
+                  {project && (
+                    <span
+                      className="shrink-0 rounded border px-1 py-px text-[9px] leading-[13px]"
+                      style={{
+                        color: project.color,
+                        borderColor: `color-mix(in srgb, ${project.color} 45%, transparent)`,
+                      }}
+                    >
+                      {project.label}
+                    </span>
+                  )}
+                  <span className="shrink-0 truncate text-[11px] text-[var(--text-secondary)]">
+                    {shortenPath(path, 32)}
+                  </span>
+                  {showIcons && (
+                    <OpenWithBar
+                      active={index === selected}
+                      available={agents}
+                      onVscode={() => void perform(row, "vscode")}
+                      onCodex={() => void perform(row, "codex")}
+                      onClaude={() => void perform(row, "claude")}
+                      onReveal={() =>
+                        void revealInExplorer(path).catch((err: unknown) =>
+                          setError(errorText(err)),
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              </Fragment>
             );
           })
         )}
       </div>
 
       {error && (
-        <div role="alert" className="shrink-0 px-4 pb-2 text-[11px] text-red-500">
+        <div role="alert" className="shrink-0 px-4 pb-2 text-[11px] text-[var(--danger)]">
           {error}
         </div>
       )}
 
-      <div className="flex h-8 shrink-0 items-center justify-between border-t border-[var(--glass-border)] px-4 text-[10px] text-[var(--text-secondary)]">
-        <span>↑↓ 选择 · Enter 打开 · Esc 关闭</span>
-        <span>{folders.length} 个文件夹</span>
+      <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-[var(--glass-border)] bg-[var(--canvas-subtle)] px-3 text-[10px] text-[var(--text-secondary)]">
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <span className="kbd">↑↓</span>
+          <span>Enter {ENTER_LABEL[settings.quickEnterAction]}</span>
+          {showIcons && (
+            <span className="truncate opacity-75">· ⌃↵ VS Code · ⌃1 Codex · ⌃2 Claude</span>
+          )}
+        </span>
+        <span className="shrink-0">
+          {status?.ready ? `索引 ${status.entries}` : `${folders.length} 个文件夹`}
+        </span>
       </div>
     </div>
   );
