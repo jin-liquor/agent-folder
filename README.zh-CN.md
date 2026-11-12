@@ -22,7 +22,7 @@ Agent Folder 是一个面向 Windows 的轻量级桌面工具，用于管理常�
 
 ## 当前版本
 
-最新版本为 **v1.1.0**，请从 [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases) 下载。
+最新版本为 **v1.1.1**，请从 [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases) 下载。
 
 ## 安装
 

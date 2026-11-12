@@ -1,6 +1,6 @@
 [package]
 name = "agent-folder"
-version = "1.1.0"
+version = "1.1.1"
 description = "快速在编辑器中打开文件夹的桌面启动器"
 edition = "2021"
 license = "MIT"

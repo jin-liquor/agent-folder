@@ -2,7 +2,10 @@
 
 All notable user-facing changes are recorded here. / 记录面向用户的重要变更。
 
-## [1.1.0] - 2026-11-12
+## [1.1.1] - 2026-11-12
+
+> 本次发布覆盖 1.0.1 之后的全部变更；1.1.0 为内部构建，未单独发布。
+> This release rolls up every change since 1.0.1; 1.1.0 was an internal build and was never published separately.
 
 ### Added / 新增
 
@@ -23,6 +26,7 @@ All notable user-facing changes are recorded here. / 记录面向用户的重要
 ### Fixed / 修复
 
 - 设置页快捷键速查补上 `Ctrl+Shift+Space`。 / Added the missing `Ctrl+Shift+Space` entry to the shortcut reference.
+- 快捷键报错不再用原始长文本撑破设置页布局，改为一句话摘要，完整原因看悬浮提示。 / Long hotkey errors no longer break the settings layout; they collapse to a one-line summary with the full reason in a tooltip.
 
 ## [1.0.1] - 2026-11-11
 
