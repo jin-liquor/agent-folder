@@ -94,8 +94,11 @@ input {
 }
 
 /* 品牌标记（原渐变块）：GitHub 用纯色方块，不用渐变 */
+/* 品牌标记：图标本身带蓝色描边与白色字形，不再铺底色，
+   否则会盖住尖括号的蓝色部分，只剩白色 A。 */
 .brand-mark {
-  background: var(--accent-emphasis);
+  background: transparent;
+  object-fit: contain;
 }
 
 /* GitHub Primer 输入框：默认描边，聚焦时蓝色描边 + 3px 光晕 */

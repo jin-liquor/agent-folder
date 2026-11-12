@@ -8,38 +8,82 @@ import { create } from "zustand";
 import * as commands from "../lib/commands";
 import * as system from "../lib/system";
 import {
+  BUILTIN_PRESETS,
+  DEFAULT_QUICK_HOTKEY,
   DEFAULT_SETTINGS,
+  EMPTY_CLI_PATHS,
+  EMPTY_CLI_PRESETS,
+  LEGACY_QUICK_HOTKEYS,
   type AppSettings,
+  type CliAgentId,
+  type CliAgentStatus,
+  type CliPreset,
   type EditorInfo,
   type FolderRecord,
   type StorageStatus,
 } from "../lib/types";
 
-const CODEX_MODES: readonly string[] = ["default", "danger-full-access", "yolo"];
-const CLAUDE_MODES: readonly string[] = ["default", "acceptEdits", "dangerously-skip-permissions"];
-const QUICK_ACTIONS: readonly string[] = ["defaultEditor", "vscode", "codex", "claude"];
+/** 各 CLI 允许的启动模式；新增模式时必须同步 Rust 的 `*_MODES` 常量。 */
+const OMP_LAUNCH_STYLES: readonly string[] = ["direct", "powershell"];
+const QUICK_ACTIONS: readonly string[] = [
+  "defaultEditor",
+  "vscode",
+  "codex",
+  "claude",
+  "omp",
+  "opencode",
+];
 
-function normalizeSettings(settings: AppSettings): AppSettings {
-  const merged = { ...DEFAULT_SETTINGS, ...settings };
+/** 某个 CLI 的全部预设（内置 + 用户自建）。 */
+export function presetsOf(settings: AppSettings, agent: CliAgentId): CliPreset[] {
+  return [...BUILTIN_PRESETS[agent], ...(settings.cliPresets?.[agent] ?? [])];
+}
+
+/** 校验选中的预设 id 是否存在；不存在时回落到 `default`。 */
+function validMode(settings: AppSettings, agent: CliAgentId, value: string): string {
+  const found = presetsOf(settings, agent).some((preset) => preset.id === value);
+  return found ? value : "default";
+}
+
+/** 从后端读到的设置补齐缺失字段，并纠正越界的预设与开关值。 */
+export function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
+  const merged: AppSettings = {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    cliPaths: { ...EMPTY_CLI_PATHS, ...(settings.cliPaths ?? {}) },
+    cliPresets: {
+      ...EMPTY_CLI_PRESETS,
+      ...(settings.cliPresets ?? {}),
+    },
+  };
+
   return {
     ...merged,
-    codexMode: CODEX_MODES.includes(merged.codexMode) ? merged.codexMode : DEFAULT_SETTINGS.codexMode,
-    claudeMode: CLAUDE_MODES.includes(merged.claudeMode)
-      ? merged.claudeMode
-      : DEFAULT_SETTINGS.claudeMode,
-    quickEnterAction: QUICK_ACTIONS.includes(merged.quickEnterAction)
+    // 旧默认值一次性升级；用户改过的组合与主动禁用保持原样。
+    quickHotkey: LEGACY_QUICK_HOTKEYS.includes(merged.quickHotkey)
+      ? DEFAULT_QUICK_HOTKEY
+      : merged.quickHotkey,
+    codexMode: validMode(merged, "codex", merged.codexMode),
+    claudeMode: validMode(merged, "claude", merged.claudeMode),
+    ompMode: validMode(merged, "omp", merged.ompMode),
+    opencodeMode: validMode(merged, "opencode", merged.opencodeMode),
+    ompLaunchStyle: (OMP_LAUNCH_STYLES.includes(merged.ompLaunchStyle)
+      ? merged.ompLaunchStyle
+      : DEFAULT_SETTINGS.ompLaunchStyle) as AppSettings["ompLaunchStyle"],
+    quickEnterAction: (QUICK_ACTIONS.includes(merged.quickEnterAction)
       ? merged.quickEnterAction
-      : DEFAULT_SETTINGS.quickEnterAction,
+      : DEFAULT_SETTINGS.quickEnterAction) as AppSettings["quickEnterAction"],
   };
 }
 
-/** 串行化设置写入，避免连续切换开关时后写覆盖先写。 */
 let settingsWrite: Promise<void> = Promise.resolve();
 
 interface AppState {
   folders: FolderRecord[];
   settings: AppSettings;
   editors: EditorInfo[];
+  /** CLI 可用性；`null` 表示尚未探测。 */
+  cliStatus: CliAgentStatus | null;
   loaded: boolean;
   /** 目录已不存在的记录 id 集合。 */
   missing: Set<string>;
@@ -47,6 +91,10 @@ interface AppState {
 
   load: () => Promise<void>;
   refreshEditors: () => Promise<void>;
+  /** 重新探测 CLI 可用性（浮窗挂载时调用）。 */
+  refreshCliStatus: () => Promise<void>;
+  /** 重新探测 CLI 可执行文件路径，返回是否全部成功。 */
+  refreshCliPaths: () => Promise<CliAgentStatus>;
   /** 后台探测失效记录，不阻塞列表加载。 */
   scanMissing: () => Promise<void>;
   /** 批量清理失效记录，返回删除数量。 */
@@ -66,6 +114,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   folders: [],
   settings: normalizeSettings(DEFAULT_SETTINGS),
   editors: [],
+  cliStatus: null,
   loaded: false,
   missing: new Set<string>(),
   storageStatus: null,
@@ -93,6 +142,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refreshEditors: async () => {
     set({ editors: await commands.detectEditors() });
+  },
+
+  refreshCliStatus: async () => {
+    set({ cliStatus: await commands.detectCliAgents() });
+  },
+
+  refreshCliPaths: async () => {
+    const [paths, status] = await commands.refreshCliPaths();
+    set({
+      // 后端已把结果写进 settings，这里同步到前端，避免两处不一致。
+      settings: { ...get().settings, cliPaths: paths },
+      cliStatus: status,
+    });
+    return status;
   },
 
   addFolder: async (path) => {

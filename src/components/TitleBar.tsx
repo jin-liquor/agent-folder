@@ -2,6 +2,7 @@
  * 无边框窗口的自定义标题栏：拖拽区域 + 应用标识 + 窗口按钮。
  */
 import * as system from "../lib/system";
+import appMark from "../assets/app-mark.png";
 import { CloseIcon, MinimizeIcon, SettingsIcon } from "./Icons";
 import TitleBarButton from "./ui/TitleBarButton";
 
@@ -14,21 +15,13 @@ export default function TitleBar({ onOpenSettings }: { onOpenSettings: () => voi
           if (event.button === 0) void system.startDragging();
         }}
       >
-        <div className="brand-mark flex h-5 w-5 items-center justify-center rounded-md">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#fff"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M8 8l-4 4 4 4" />
-            <path d="M16 8l4 4-4 4" />
-          </svg>
-        </div>
+        <img
+          src={appMark}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="brand-mark h-[18px] w-[18px] shrink-0 select-none"
+        />
         <span className="text-[12.5px] font-semibold tracking-wide text-[var(--text-primary)]">
           Agent Folder
         </span>

@@ -47,13 +47,18 @@ pub fn run() {
             setup_tray_deferred(app.handle().clone());
             // 先装载缓存再后台重建：快速启动窗口首次打开即可搜索。
             commands::bootstrap_index(app.handle().clone());
+            // CLI 路径探测放在后台，避免拖慢首屏。
+            probe_cli_paths_deferred(app.handle().clone());
 
-            let hotkey = {
+            let (toggle_hotkey, quick_hotkey) = {
                 let store = app.state::<Store>();
-                let value = store.data().settings.global_hotkey.clone();
-                value
+                let data = store.data();
+                (
+                    data.settings.global_hotkey.clone(),
+                    data.settings.quick_hotkey.clone(),
+                )
             };
-            let status = system::hotkey::register_all(app.handle(), &hotkey);
+            let status = system::hotkey::register_all(app.handle(), &toggle_hotkey, &quick_hotkey);
             if let Err(error) = status {
                 eprintln!("注册快捷键失败: {error}");
             }
@@ -87,6 +92,27 @@ fn setup_tray_deferred(app: tauri::AppHandle) {
             }
         }) {
             eprintln!("调度系统托盘初始化失败: {error}");
+        }
+    });
+}
+
+/// 启动时校验 CLI 路径缓存：为空、过期或指向已删除的文件时重新探测。
+///
+/// 探测会 fork `where.exe` 等子进程，因此放到后台线程，不阻塞首屏。
+/// 失败只写 stderr：CLI 路径不是启动的必要条件，探测不到时界面会把图标置灰。
+fn probe_cli_paths_deferred(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let store = app.state::<Store>();
+        let needs_probe = {
+            let data = store.data();
+            let paths = &data.settings.cli_paths;
+            paths.is_empty() || paths.has_stale_entry() || paths.probed_at == 0
+        };
+        if !needs_probe {
+            return;
+        }
+        if let Err(error) = commands::probe_and_store(&store) {
+            eprintln!("探测 CLI 路径失败: {error}");
         }
     });
 }

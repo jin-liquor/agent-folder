@@ -11,7 +11,7 @@ import { openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
 import { errorText } from "./lib/errors";
 import { queryTokens } from "./lib/search";
 import { useAppStore, applyTheme } from "./stores/useAppStore";
-import type { FolderRecord } from "./lib/types";
+import type { CliAgentId, FolderRecord } from "./lib/types";
 import TitleBar from "./components/TitleBar";
 import SearchBar from "./components/SearchBar";
 import FolderItem from "./components/FolderItem";
@@ -55,6 +55,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const scanMode = settings.scanEnabled;
   const [addOpen, setAddOpen] = useState(false);
+  /** 需要以键盘方式打开操作菜单的记录 id。 */
+  const [menuRecordId, setMenuRecordId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -164,13 +166,15 @@ export default function App() {
   );
 
   const launchAgent = useCallback(
-    async (path: string, agent: "codex" | "claude", name: string) => {
+    async (path: string, agent: CliAgentId, name: string) => {
       try {
         const command = await openCliAgent(path, agent);
         toast.show(`${name} 已启动：${command}`);
         setQuery("");
         if (settings.hideAfterOpen) void system.hideWindow();
       } catch (error: unknown) {
+        // 失败时不能顺手隐藏窗口，否则提示跟着窗口一起消失，
+        // 用户看到的就是「点了没反应」。
         toast.show(`启动${name}失败：${errorText(error)}`);
       }
     },
@@ -293,6 +297,11 @@ export default function App() {
     onRemove: (row) => {
       if (row.kind === "record") void handleRemove(row.record);
     },
+    onContextMenu: (row) => {
+      if (row.kind !== "record") return;
+      // 键盘触发时没有鼠标坐标，统一让目标行在自身位置打开菜单。
+      setMenuRecordId(row.record.id);
+    },
     onFocusSearch: focusSearch,
     onOpenSettings: () => setSettingsOpen(true),
     settingsOpen,
@@ -319,6 +328,8 @@ export default function App() {
           onOpenVisualStudioCode={() => void openInVSCode(row.record)}
           onLaunchCodex={() => void launchAgent(row.record.path, "codex", "Codex")}
           onLaunchClaude={() => void launchAgent(row.record.path, "claude", "Claude Code")}
+          onLaunchOmp={() => void launchAgent(row.record.path, "omp", "omp")}
+          onLaunchOpencode={() => void launchAgent(row.record.path, "opencode", "opencode")}
           onFavorite={() => void changeFavorite(row.record)}
           onReveal={() =>
             void revealInExplorer(row.record.path)
@@ -335,6 +346,8 @@ export default function App() {
           onRename={(name) => void handleRename(row.record, name)}
           onColor={(color) => void handleColor(row.record, color)}
           onTags={(tags) => void handleTags(row.record, tags)}
+          forceMenu={menuRecordId === row.record.id}
+          onMenuClosed={() => setMenuRecordId(null)}
         />
       );
     }

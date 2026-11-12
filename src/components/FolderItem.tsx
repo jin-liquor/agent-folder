@@ -1,7 +1,9 @@
 /**
  * 一条已保存的文件夹记录行。
  *
- * 支持原地重命名（双击名称或点编辑）与颜色标记，两者都会立即持久化。
+ * 行内只保留 6 个高频动作：VS Code / Codex / Claude / omp / opencode / 收藏。
+ * 收藏、重命名、颜色、标签、资源管理器、复制路径、移除等低频操作
+ * 统一收进右键菜单（`Shift+F10` 为键盘等价入口）。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { FolderRecord } from "../lib/types";
@@ -10,12 +12,15 @@ import { projectStyle } from "../lib/project";
 import ActionButton from "./ui/ActionButton";
 import ColorPicker from "./ColorPicker";
 import TagEditor from "./TagEditor";
+import ContextMenu, { type MenuEntry } from "./ContextMenu";
 import {
   ClaudeIcon,
   CodexIcon,
   CopyIcon,
   EditIcon,
   FolderIcon,
+  OmpIcon,
+  OpencodeIcon,
   PaletteIcon,
   RevealIcon,
   StarIcon,
@@ -34,6 +39,8 @@ interface Props {
   onOpenVisualStudioCode: () => void;
   onLaunchCodex: () => void;
   onLaunchClaude: () => void;
+  onLaunchOmp: () => void;
+  onLaunchOpencode: () => void;
   onFavorite: () => void;
   onReveal: () => void;
   onCopy: () => void;
@@ -41,6 +48,10 @@ interface Props {
   onRename: (name: string) => void;
   onColor: (color: string | null) => void;
   onTags: (tags: string[]) => void;
+  /** 外部要求打开操作菜单（键盘 Shift+F10 触发）。 */
+  forceMenu?: boolean;
+  /** 菜单关闭后通知外层复位。 */
+  onMenuClosed?: () => void;
 }
 
 export default function FolderItem({
@@ -52,6 +63,8 @@ export default function FolderItem({
   onOpenVisualStudioCode,
   onLaunchCodex,
   onLaunchClaude,
+  onLaunchOmp,
+  onLaunchOpencode,
   onFavorite,
   onReveal,
   onCopy,
@@ -59,12 +72,16 @@ export default function FolderItem({
   onRename,
   onColor,
   onTags,
+  forceMenu = false,
+  onMenuClosed,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(record.name);
   const [colorOpen, setColorOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing) {
@@ -92,12 +109,87 @@ export default function FolderItem({
 
   const project = projectStyle(record.kind);
 
+  /** 右键菜单项：低频动作全部收在这里。 */
+  const menuEntries: MenuEntry[] = [
+    { id: "reveal", label: "在资源管理器中显示", icon: <RevealIcon size={12} /> },
+    { id: "copy", label: "复制路径", icon: <CopyIcon size={12} /> },
+    { sep: true },
+    {
+      id: "favorite",
+      label: record.favorite ? "取消收藏" : "收藏",
+      icon: <StarIcon size={12} filled={record.favorite} />,
+    },
+    { id: "rename", label: "重命名", icon: <EditIcon size={12} /> },
+    { id: "color", label: "标记颜色", icon: <PaletteIcon size={12} /> },
+    { id: "tags", label: "编辑标签", icon: <TagIcon size={12} /> },
+    { sep: true },
+    { id: "remove", label: "移除记录", icon: <TrashIcon size={12} />, danger: true },
+  ];
+
+  const handleMenuSelect = (id: string) => {
+    setMenu(null);
+    switch (id) {
+      case "reveal":
+        onReveal();
+        break;
+      case "copy":
+        onCopy();
+        break;
+      case "favorite":
+        onFavorite();
+        break;
+      case "rename":
+        beginEdit();
+        break;
+      case "color":
+        setColorOpen(true);
+        break;
+      case "tags":
+        setTagsOpen(true);
+        break;
+      case "remove":
+        onRemove();
+        break;
+      default:
+        break;
+    }
+  };
+
+  const openMenuAt = (x: number, y: number) => {
+    setColorOpen(false);
+    setTagsOpen(false);
+    setMenu({ x, y });
+  };
+
+  // 键盘触发（Shift+F10）时没有鼠标坐标，用行自身位置打开。
+  useEffect(() => {
+    if (!forceMenu) return;
+    const element = rowRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    openMenuAt(rect.left + 48, rect.top + rect.height / 2);
+  }, [forceMenu]);
+
   return (
     <div
+      ref={rowRef}
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className={`group relative mx-2 flex h-[52px] cursor-pointer items-center gap-2.5 rounded-md px-2.5 transition-colors row-hover ${
+      onContextMenu={(event) => {
+        event.preventDefault();
+        openMenuAt(event.clientX, event.clientY);
+      }}
+      onKeyDown={(event) => {
+        // Shift+F10 是 Windows 上打开上下文菜单的键盘等价操作。
+        if (event.key === "F10" && event.shiftKey) {
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          openMenuAt(rect.left + 48, rect.top + rect.height / 2);
+        }
+      }}
+      tabIndex={0}
+      className={`group relative mx-2 flex h-[52px] cursor-pointer items-center gap-2.5 rounded-md px-2.5 transition-colors row-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
         selected ? "row-selected" : ""
       }`}
     >
@@ -209,26 +301,14 @@ export default function FolderItem({
         <ActionButton title="启动 Claude Code" onClick={onLaunchClaude}>
           <ClaudeIcon size={14} />
         </ActionButton>
+        <ActionButton title="启动 omp" onClick={onLaunchOmp}>
+          <OmpIcon size={14} />
+        </ActionButton>
+        <ActionButton title="启动 opencode" onClick={onLaunchOpencode}>
+          <OpencodeIcon size={14} />
+        </ActionButton>
         <ActionButton title={record.favorite ? "取消收藏" : "收藏"} onClick={onFavorite}>
           <StarIcon size={14} filled={record.favorite} />
-        </ActionButton>
-        <ActionButton title="重命名" onClick={beginEdit}>
-          <EditIcon size={14} />
-        </ActionButton>
-        <ActionButton title="标记颜色" onClick={() => setColorOpen((open) => !open)}>
-          <PaletteIcon size={14} />
-        </ActionButton>
-        <ActionButton title="编辑标签" onClick={() => setTagsOpen((open) => !open)}>
-          <TagIcon size={14} />
-        </ActionButton>
-        <ActionButton title="在资源管理器中显示" onClick={onReveal}>
-          <RevealIcon size={14} />
-        </ActionButton>
-        <ActionButton title="复制路径" onClick={onCopy}>
-          <CopyIcon size={14} />
-        </ActionButton>
-        <ActionButton title="移除记录" onClick={onRemove} danger>
-          <TrashIcon size={14} />
         </ActionButton>
       </div>
 
@@ -245,6 +325,19 @@ export default function FolderItem({
           tags={record.tags}
           onSubmit={onTags}
           onClose={() => setTagsOpen(false)}
+        />
+      )}
+
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          entries={menuEntries}
+          onSelect={handleMenuSelect}
+          onClose={() => {
+            setMenu(null);
+            onMenuClosed?.();
+          }}
         />
       )}
     </div>

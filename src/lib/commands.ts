@@ -8,7 +8,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  CliAgentId,
   CliAgentStatus,
+  CliPaths,
   EditorInfo,
   FolderRecord,
   HotkeyStatus,
@@ -60,10 +62,15 @@ export const openInEditor = (path: string, editor?: string) =>
   invoke<OpenResult>("open_in_editor", { path, editor: editor ?? null });
 export const revealInExplorer = (path: string) => invoke<void>("reveal_in_explorer", { path });
 export const detectEditors = () => invoke<EditorInfo[]>("detect_editors");
-/** 探测 Codex / Claude 是否可用，用于浮窗图标禁用态。 */
+/** 探测 Codex / Claude / omp / opencode 是否可用，用于浮窗图标禁用态。 */
 export const detectCliAgents = () => invoke<CliAgentStatus>("detect_cli_agents");
+/** 返回各 CLI 当前解析到的可执行文件路径（设置页展示用）。 */
+export const resolveCliPaths = () => invoke<[string, string][]>("resolve_cli_paths");
+/** 重新探测全部 CLI 路径并写回设置。 */
+export const refreshCliPaths = () =>
+  invoke<[CliPaths, CliAgentStatus]>("refresh_cli_paths");
 /** `record` 为真时顺带写入打开历史（浮窗打开磁盘结果时使用）。 */
-export const openCliAgent = (path: string, agent: "codex" | "claude", record = false) =>
+export const openCliAgent = (path: string, agent: CliAgentId, record = false) =>
   invoke<string>("open_cli_agent", { path, agent, record });
 
 // ---------------------------------------------------------------------- 设置

@@ -7,5 +7,6 @@
 
 export { default as Switch } from "./Switch";
 export { default as SettingRow } from "./SettingRow";
+export { default as SettingSection } from "./SettingSection";
 export { default as ActionButton } from "./ActionButton";
 export { default as TitleBarButton } from "./TitleBarButton";

@@ -5,7 +5,9 @@ use tauri::{AppHandle, State};
 
 use super::folders::mutate_and_save;
 use crate::model::FolderRecord;
-use crate::services::editor::{self, CliAgentStatus, EditorInfo};
+use crate::services::cli_args::split_args;
+use crate::services::cli_probe::{self, CliAgent};
+use crate::services::editor::{self, CliAgentStatus, EditorInfo, OmpLaunchStyle};
 use crate::storage::Store;
 use crate::system::tray;
 
@@ -64,11 +66,13 @@ pub fn open_in_editor(
     })
 }
 
-/// 在项目目录中交互式启动 Codex CLI 或 Claude Code。
+/// 在项目目录中交互式启动 CLI（codex / claude / omp / opencode）。
+///
+/// 参数来自选中的预设：`mode` 是预设 id，参数串在该预设里。
+/// 预设找不到时返回错误而不是退回默认模式——否则用户会以为自定义参数生效了。
 ///
 /// `record` 为 `true` 时顺带把该目录写入打开历史——快速启动浮窗里打开的
 /// 磁盘结果默认走这条路径，保证「用过的文件夹一定会出现在列表里」。
-/// 记录失败不会把启动成功改判为失败，只写 stderr，避免误导用户重复点击。
 #[tauri::command]
 pub fn open_cli_agent(
     app: AppHandle,
@@ -77,21 +81,33 @@ pub fn open_cli_agent(
     agent: String,
     record: Option<bool>,
 ) -> Result<String, String> {
-    let mode = {
+    let agent = CliAgent::parse(&agent).ok_or_else(|| format!("不支持的 CLI 工具: {agent}"))?;
+
+    let (args, cached, style) = {
         let data = state.data();
-        match agent.as_str() {
-            "codex" => data.settings.codex_mode.clone(),
-            "claude" => data.settings.claude_mode.clone(),
-            _ => return Err(format!("不支持的 CLI 工具: {agent}")),
-        }
+        let settings = &data.settings;
+        let mode = settings.mode_of(agent);
+        let preset = settings.find_preset(agent, mode).ok_or_else(|| {
+            format!(
+                "{} 的启动模式「{mode}」不存在，请在设置里重新选择",
+                agent.label()
+            )
+        })?;
+        let args = split_args(&preset.args)?;
+        (
+            args,
+            settings.cli_paths.get(agent).to_string(),
+            OmpLaunchStyle::parse(&settings.omp_launch_style),
+        )
     };
 
-    let command = editor::open_cli_agent(&path, &agent, &mode)?;
+    let cached = (!cached.is_empty()).then_some(cached);
+    let command = editor::open_cli_agent(&path, agent, &args, cached.as_deref(), style)?;
 
     if record.unwrap_or(false) {
         match mutate_and_save(&state, |data| Ok(data.upsert(&path))) {
             Ok(_) => tray::rebuild_menu(&app),
-            Err(error) => eprintln!("{agent} 已启动，但历史记录保存失败：{error}"),
+            Err(error) => eprintln!("{} 已启动，但历史记录保存失败：{error}", agent.id()),
         }
     }
 
@@ -109,8 +125,25 @@ pub fn detect_editors() -> Vec<EditorInfo> {
     editor::detect_editors()
 }
 
-/// 探测 Codex / Claude 命令是否可用，用于快速启动图标禁用态。
+/// 探测 Codex / Claude / omp / opencode 命令是否可用，用于快速启动图标禁用态。
+///
+/// 优先使用设置里缓存的路径；缓存为空时才现探，避免每次打开浮窗都 fork 子进程。
 #[tauri::command]
-pub fn detect_cli_agents() -> CliAgentStatus {
-    editor::detect_cli_agents()
+pub fn detect_cli_agents(state: State<Store>) -> CliAgentStatus {
+    let cached = state.data().settings.cli_paths.clone();
+    editor::detect_cli_agents(&cached)
+}
+
+/// 返回各 CLI 当前解析到的可执行文件路径（设置页展示用）。
+#[tauri::command]
+pub fn resolve_cli_paths(state: State<Store>) -> Vec<(String, String)> {
+    let data = state.data();
+    cli_probe::CliAgent::ALL
+        .iter()
+        .map(|agent| {
+            let cached = data.settings.cli_paths.get(*agent);
+            let resolved = cli_probe::resolve(*agent, (!cached.is_empty()).then_some(cached));
+            (agent.id().to_string(), resolved.path_text())
+        })
+        .collect()
 }

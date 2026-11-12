@@ -2,7 +2,8 @@
 
 use tauri::{AppHandle, State};
 
-use crate::model::AppSettings;
+use crate::model::{AppSettings, CliPaths};
+use crate::services::{cli_probe, editor};
 use crate::storage::{StorageStatus, Store};
 use crate::system::{hotkey, tray};
 
@@ -44,8 +45,82 @@ pub fn get_hotkey_status() -> hotkey::HotkeyStatus {
 /// 使用当前保存的设置重新注册快捷键。
 #[tauri::command]
 pub fn retry_hotkeys(state: State<Store>, app: AppHandle) -> Result<hotkey::HotkeyStatus, String> {
-    let shortcut = state.data().settings.global_hotkey.clone();
-    hotkey::register_all(&app, &shortcut)
+    let (toggle, quick) = {
+        let data = state.data();
+        (
+            data.settings.global_hotkey.clone(),
+            data.settings.quick_hotkey.clone(),
+        )
+    };
+    hotkey::register_all(&app, &toggle, &quick)
+}
+
+/// 重新探测全部 CLI 的可执行文件路径，并把结果写入设置。
+///
+/// 供设置页的「重新探测」按钮调用；启动时的自动探测也复用这里的逻辑。
+#[tauri::command]
+pub fn refresh_cli_paths(
+    app: AppHandle,
+    state: State<Store>,
+) -> Result<(CliPaths, editor::CliAgentStatus), String> {
+    let (paths, status) = probe_and_store(&state)?;
+    tray::rebuild_menu(&app);
+    Ok((paths, status))
+}
+
+/// 探测全部 CLI 并写回设置，返回新缓存与可用性状态。
+///
+/// 探测会 fork `where.exe` 等子进程，属于耗时操作，因此放在锁外先算好，
+/// 再短暂持锁写入。
+pub fn probe_and_store(state: &Store) -> Result<(CliPaths, editor::CliAgentStatus), String> {
+    let overrides: Vec<(cli_probe::CliAgent, Option<String>)> = {
+        let data = state.data();
+        cli_probe::CliAgent::ALL
+            .iter()
+            .map(|agent| {
+                (
+                    *agent,
+                    Some(data.settings.cli_paths.get(*agent).to_string()),
+                )
+            })
+            .collect()
+    };
+
+    let mut paths = CliPaths {
+        probed_at: crate::model::now_ms() as u64,
+        ..CliPaths::default()
+    };
+    let mut available = Vec::new();
+    for (agent, resolved) in cli_probe::resolve_all(&overrides) {
+        paths.set(agent, resolved.path_text());
+        available.push((agent, resolved.is_available()));
+    }
+
+    {
+        let mut data = state.data();
+        let snapshot = data.settings.cli_paths.clone();
+        data.settings.cli_paths = paths.clone();
+        if let Err(error) = state.save_locked(&data) {
+            data.settings.cli_paths = snapshot;
+            return Err(error);
+        }
+    }
+
+    let status = editor::CliAgentStatus {
+        codex: available
+            .iter()
+            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Codex && *ok),
+        claude: available
+            .iter()
+            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Claude && *ok),
+        omp: available
+            .iter()
+            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Omp && *ok),
+        opencode: available
+            .iter()
+            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Opencode && *ok),
+    };
+    Ok((paths, status))
 }
 
 /// 保存设置。
@@ -61,21 +136,32 @@ pub fn save_settings(
     state: State<Store>,
     mut settings: AppSettings,
 ) -> Result<AppSettings, String> {
-    settings.normalize_cli_modes();
+    settings.normalize();
     // 第一步：读取旧值并判断是否需要换快捷键（短暂持锁）。
     let previous = state.data().settings.clone();
-    let hotkey_changed = settings.global_hotkey != previous.global_hotkey;
+    let toggle_changed = settings.global_hotkey != previous.global_hotkey;
+    let quick_changed = settings.quick_hotkey != previous.quick_hotkey;
+    let hotkey_changed = toggle_changed || quick_changed;
 
     // 第二步：锁外注册快捷键，避免系统调用阻塞其他命令。
     if hotkey_changed {
-        let status = hotkey::register_all(&app, &settings.global_hotkey)?;
+        let status = hotkey::register_all(&app, &settings.global_hotkey, &settings.quick_hotkey)?;
+        // 主窗口快捷键是核心能力，注册失败必须拒绝保存；
+        // 快速启动快捷键冲突只提示，不阻断保存（用户可能只是想禁用）。
         if !status.toggle_registered {
-            let _ = hotkey::register_all(&app, &previous.global_hotkey);
+            let _ = hotkey::register_all(&app, &previous.global_hotkey, &previous.quick_hotkey);
             return Err(format!(
                 "主窗口快捷键注册失败：{}",
                 status
                     .toggle_error
                     .unwrap_or_else(|| "可能已被其他程序占用".into())
+            ));
+        }
+        if quick_changed && status.quick_error.is_some() {
+            let _ = hotkey::register_all(&app, &previous.global_hotkey, &previous.quick_hotkey);
+            return Err(format!(
+                "快速启动快捷键注册失败：{}",
+                status.quick_error.unwrap_or_default()
             ));
         }
     }
@@ -91,7 +177,7 @@ pub fn save_settings(
             data.settings = rollback;
             drop(data);
             if hotkey_changed {
-                let _ = hotkey::register_all(&app, &previous.global_hotkey);
+                let _ = hotkey::register_all(&app, &previous.global_hotkey, &previous.quick_hotkey);
             }
             return Err(error);
         }

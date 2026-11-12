@@ -12,14 +12,33 @@ interface Props {
   onChange: (hotkey: string) => void;
   /** 保存失败时的错误信息，用于就地提示。 */
   error?: string | null;
+  /**
+   * 允许清空成「未设置」（表示主动禁用该快捷键）。
+   *
+   * 全局主窗口快捷键不允许为空——空值会让注册必然失败；
+   * 快速启动快捷键允许为空，用户可能就想把它关掉。
+   */
+  allowEmpty?: boolean;
 }
 
 /** 可识别的修饰键。 */
 const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta"]);
 
+/**
+ * 允许单独作为修饰键使用的按键。
+ *
+ * Win 键（`Meta` → `Super`）在 Windows 上是合法的独立修饰键，
+ * 例如默认的 `Super+Space`；Ctrl / Alt / Shift 单独按也会被录制，
+ * 但那样会和日常输入冲突，因此仍然只认 Win 键。
+ */
+const STANDALONE_MODIFIERS = new Set(["Meta"]);
+
 /** 浏览器键名 → 插件识别的键名。 */
 function normalizeKey(key: string): string | null {
-  if (MODIFIER_KEYS.has(key)) return null;
+  if (MODIFIER_KEYS.has(key)) {
+    // 修饰键只有在允许单独使用时才转成名称，否则返回 null（继续等主键）。
+    return STANDALONE_MODIFIERS.has(key) ? (key === "Meta" ? "Super" : key) : null;
+  }
   if (key === " ") return "Space";
   if (key === "Escape") return "Escape";
   if (key === "ArrowUp") return "Up";
@@ -33,14 +52,20 @@ function normalizeKey(key: string): string | null {
 
 /** 把键盘事件转成插件要求的字符串；缺少修饰键或主键时返回 null。 */
 export function formatHotkey(event: KeyboardEvent): string | null {
-  const key = normalizeKey(event.key);
-  if (!key) return null;
-
   const parts: string[] = [];
   if (event.ctrlKey) parts.push("Ctrl");
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
   if (event.metaKey) parts.push("Super");
+
+  const key = normalizeKey(event.key);
+
+  // 单独按下 Win 键：把它本身当作主键，产出 `Super`。
+  if (key === "Super") {
+    return "Super";
+  }
+
+  if (!key) return null;
 
   // 只按单个普通键会与日常输入冲突，必须带修饰键。
   if (parts.length === 0) return null;
@@ -49,7 +74,7 @@ export function formatHotkey(event: KeyboardEvent): string | null {
   return parts.join("+");
 }
 
-export default function HotkeyInput({ value, onChange, error }: Props) {
+export default function HotkeyInput({ value, onChange, error, allowEmpty = false }: Props) {
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -69,7 +94,7 @@ export default function HotkeyInput({ value, onChange, error }: Props) {
 
       const formatted = formatHotkey(event);
       if (!formatted) {
-        setHint("需要至少一个修饰键（Ctrl / Alt / Shift）");
+        setHint("需要至少一个修饰键（Ctrl / Alt / Shift / Win）");
         return;
       }
       setRecording(false);
@@ -100,6 +125,8 @@ export default function HotkeyInput({ value, onChange, error }: Props) {
       >
         {recording ? (
           <span className="text-[11px] text-[var(--accent)]">请按下组合键…</span>
+        ) : value.trim() === "" ? (
+          <span className="text-[11px] text-[var(--text-secondary)]">未设置</span>
         ) : (
           value.split("+").map((key) => (
             <span key={key} className="kbd">
@@ -108,6 +135,21 @@ export default function HotkeyInput({ value, onChange, error }: Props) {
           ))
         )}
       </button>
+
+      {allowEmpty && !recording && (
+        <button
+          type="button"
+          onClick={() => {
+            setRecording(false);
+            setHint(null);
+            onChange("");
+          }}
+          disabled={value.trim() === ""}
+          className="self-end text-[10px] text-[var(--text-secondary)] transition hover:text-[var(--danger)] disabled:opacity-40 disabled:hover:text-[var(--text-secondary)]"
+        >
+          清空（禁用）
+        </button>
+      )}
 
       {(hint || error) && (
         <span role="alert" className="max-w-[190px] text-right text-[10px] text-red-500">

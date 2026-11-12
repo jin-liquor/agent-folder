@@ -4,13 +4,23 @@
  * 每个改动立即持久化；失败时回滚草稿并提示原因。
  */
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import { errorText } from "../lib/errors";
 import * as commands from "../lib/commands";
-import type { AppSettings, EditorInfo, HotkeyStatus, IndexStatus } from "../lib/types";
+import type {
+  AppSettings,
+  CliAgentId,
+  CliPaths,
+  EditorInfo,
+  HotkeyStatus,
+  IndexStatus,
+} from "../lib/types";
+import { BUILTIN_PRESETS } from "../lib/types";
+import CliPresetEditor from "./CliPresetEditor";
 import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./Icons";
 import SettingRow from "./ui/SettingRow";
+import SettingSection from "./ui/SettingSection";
 import Switch from "./ui/Switch";
 import ScanRootsEditor from "./ScanRootsEditor";
 import DataPortControls from "./DataPortControls";
@@ -23,16 +33,17 @@ const THEME_OPTIONS = [
   { value: "system", title: "跟随系统", Icon: MonitorIcon },
 ] as const;
 
-/** 快捷键速查表。 */
+/** 快捷键速查表（不含可配置的全局快捷键，那两项单独展示）。 */
 const SHORTCUTS: [string, string][] = [
   ["Ctrl K", "聚焦搜索框"],
   ["↑ ↓", "选择条目"],
   ["Enter", "在编辑器中打开"],
   ["Ctrl D", "收藏 / 取消收藏"],
   ["Delete", "移除记录"],
-  ["Ctrl Shift Space", "显示 / 隐藏快速启动浮窗"],
+  ["右键 / Shift F10", "更多操作菜单"],
 ];
 
+/** 各 CLI 的展示元数据，避免设置页出现六段重复 JSX。 */
 /** 把后端的原始快捷键错误压成一行可读文案（完整原因放 title）。 */
 function hotkeyErrorText(error?: string | null): string {
   if (!error) return "未注册";
@@ -43,6 +54,42 @@ function hotkeyErrorText(error?: string | null): string {
 /** 编辑器列表为空时的兜底项，避免下拉框空白。 */
 const FALLBACK_EDITORS: EditorInfo[] = [
   { id: "vscode", name: "Visual Studio Code", available: true },
+];
+
+interface CliConfig {
+  id: CliAgentId;
+  name: string;
+  /** 该 CLI 的预设字段名（`codexMode` 等）。 */
+  modeKey: keyof AppSettings;
+  /** 附加参数占位示例。 */
+  placeholder: string;
+}
+
+const CLI_CONFIGS: CliConfig[] = [
+  {
+    id: "codex",
+    name: "codex",
+    modeKey: "codexMode",
+    placeholder: "--model gpt-5-codex",
+  },
+  {
+    id: "claude",
+    name: "Claude Code",
+    modeKey: "claudeMode",
+    placeholder: "--model sonnet",
+  },
+  {
+    id: "omp",
+    name: "omp",
+    modeKey: "ompMode",
+    placeholder: "--model opus",
+  },
+  {
+    id: "opencode",
+    name: "opencode",
+    modeKey: "opencodeMode",
+    placeholder: "--model anthropic/claude-sonnet",
+  },
 ];
 
 export default function SettingsDrawer({
@@ -58,17 +105,20 @@ export default function SettingsDrawer({
   /** 结果提示，复用外层 toast。 */
   onToast: (message: string) => void;
 }) {
-  const { settings, saveSettings, editors, refreshEditors } = useAppStore();
+  const { settings, saveSettings, editors, refreshEditors, refreshCliPaths } = useAppStore();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hotkeyStatus, setHotkeyStatus] = useState<HotkeyStatus | null>(null);
   const [retryingHotkeys, setRetryingHotkeys] = useState(false);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [indexBusy, setIndexBusy] = useState(false);
+  const [cliPaths, setCliPaths] = useState<CliPaths>(settings.cliPaths);
+  const [probing, setProbing] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setDraft(settings);
+    setCliPaths(settings.cliPaths);
     setSaveError(null);
     void commands.getHotkeyStatus().then(setHotkeyStatus).catch(() => setHotkeyStatus(null));
     void commands.getIndexStatus().then(setIndexStatus).catch(() => setIndexStatus(null));
@@ -76,6 +126,24 @@ export default function SettingsDrawer({
     // 仅在打开时同步草稿，避免保存过程中被覆盖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  /** 重新探测全部 CLI 路径，并刷新界面上的路径表。 */
+  const reProbe = async () => {
+    setProbing(true);
+    try {
+      const status = await refreshCliPaths();
+      const next = useAppStore.getState().settings.cliPaths;
+      setCliPaths(next);
+      const found = [status.codex, status.claude, status.omp, status.opencode].filter(
+        Boolean,
+      ).length;
+      onToast(`已重新探测：${found} / 4 个 CLI 可用`);
+    } catch (error) {
+      onToast(`探测失败：${errorText(error)}`);
+    } finally {
+      setProbing(false);
+    }
+  };
 
   /** 保存单个字段；失败时用最新服务端状态回滚。 */
   const persist = (patch: Partial<AppSettings>) => {
@@ -147,6 +215,26 @@ export default function SettingsDrawer({
 
   const editorOptions = editors.length > 0 ? editors : FALLBACK_EDITORS;
 
+  /**
+   * 只在真正有冲突时提示；注册成功不显示任何文字。
+   *
+   * 两组快捷键分别判断：快速启动允许为空（已禁用），那不是错误。
+   */
+  const hotkeyConflict = (() => {
+    const problems: string[] = [];
+    if (hotkeyStatus && !hotkeyStatus.toggleRegistered) {
+      problems.push(
+        `主窗口快捷键${hotkeyErrorText(hotkeyStatus.toggleError)}`,
+      );
+    }
+    if (hotkeyStatus?.quickHotkey && hotkeyStatus && !hotkeyStatus.quickRegistered) {
+      problems.push(
+        `快速启动快捷键${hotkeyErrorText(hotkeyStatus.quickError)}`,
+      );
+    }
+    return problems.length > 0 ? problems.join("；") : null;
+  })();
+
   return (
     <AnimatePresence>
       {open && (
@@ -178,7 +266,9 @@ export default function SettingsDrawer({
 
             <div className="flex-1 overflow-y-auto px-4 pb-6">
               <div className="divide-y divide-[var(--glass-border)]">
-                <SettingRow label="外观" desc="选择界面主题">
+                <SettingSection title="外观">
+                <SettingRow label="主题">
+
                   <div className="flex gap-1.5">
                     {THEME_OPTIONS.map(({ value, title, Icon }) => (
                       <button
@@ -198,7 +288,11 @@ export default function SettingsDrawer({
                   </div>
                 </SettingRow>
 
-                <SettingRow label="默认编辑器" desc="点击文件夹时使用的编辑器">
+                </SettingSection>
+
+                <SettingSection title="编辑器">
+                <SettingRow label="默认编辑器">
+
                   <select
                     value={draft.defaultEditor}
                     aria-label="默认编辑器"
@@ -214,8 +308,13 @@ export default function SettingsDrawer({
                   </select>
                 </SettingRow>
 
-                <SettingRow
-                  label="快速启动默认动作"
+                </SettingSection>
+
+                <SettingSection
+                  title="快速启动浮窗"
+                  desc="浮窗内只保留 ↑ ↓ 选择与 Enter 打开，切换打开方式用行内图标按钮。"
+                >
+                <SettingRow label="Enter 默认动作"
                   desc="浮窗里按 Enter 执行的动作；行内图标可随时切换打开方式"
                 >
                   <select
@@ -235,10 +334,7 @@ export default function SettingsDrawer({
                   </select>
                 </SettingRow>
 
-                <SettingRow
-                  label="显示打开方式图标"
-                  desc="在浮窗结果行右侧显示 VS Code / Codex / Claude 图标"
-                >
+                <SettingRow label="显示打开方式图标">
                   <Switch
                     label="显示打开方式图标"
                     checked={draft.quickOpenWith}
@@ -246,41 +342,117 @@ export default function SettingsDrawer({
                   />
                 </SettingRow>
 
-                <SettingRow label="Codex CLI 启动模式" desc="在项目目录打开交互式 Codex 会话">
+{CLI_CONFIGS.map((config) => (
+                  <SettingRow key={config.id} label={`${config.name} 启动模式`}>
+                    <CliPresetEditor
+                      agent={config.id}
+                      builtins={BUILTIN_PRESETS[config.id]}
+                      userPresets={draft.cliPresets[config.id] ?? []}
+                      selected={String(draft[config.modeKey] ?? "default")}
+                      onSelect={(id) => update({ [config.modeKey]: id } as Partial<AppSettings>)}
+                      onChange={(presets) =>
+                        update({
+                          cliPresets: { ...draft.cliPresets, [config.id]: presets },
+                        })
+                      }
+                      placeholder={config.placeholder}
+                    />
+                  </SettingRow>
+                ))}
+
+                </SettingSection>
+
+                <SettingSection
+                  title="CLI 检测"
+                  desc="首次启动自动探测并保存各 CLI 的可执行文件路径；文件被移动或卸载后可重新探测。"
+                >
+                <SettingRow
+                  label="omp 启动方式"
+                  desc="默认直接启动 omp.exe；选 PowerShell 会新开窗口并加载你的 profile"
+                >
                   <select
-                    value={draft.codexMode}
-                    aria-label="Codex CLI 启动模式"
+                    value={draft.ompLaunchStyle}
+                    aria-label="omp 启动方式"
                     onChange={(event) =>
-                      update({ codexMode: event.target.value as AppSettings["codexMode"] })
+                      update({
+                        ompLaunchStyle: event.target.value as AppSettings["ompLaunchStyle"],
+                      })
                     }
                     className="h-8 max-w-[170px] rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
                   >
-                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="default">默认</option>
-                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="danger-full-access">danger-full-access（高风险）</option>
-                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="yolo">yolo（高风险）</option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="direct">
+                      直接启动（推荐）
+                    </option>
+                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="powershell">
+                      PowerShell 窗口
+                    </option>
                   </select>
                 </SettingRow>
 
-                <SettingRow label="Claude Code 启动模式" desc="在项目目录打开交互式 Claude Code 会话">
-                  <select
-                    value={draft.claudeMode}
-                    aria-label="Claude Code 启动模式"
-                    onChange={(event) =>
-                      update({ claudeMode: event.target.value as AppSettings["claudeMode"] })
-                    }
-                    className="h-8 max-w-[190px] rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] px-2 text-[11px] text-[var(--text-primary)] outline-none"
-                  >
-                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="default">默认</option>
-                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="acceptEdits">acceptEdits</option>
-                    <option className="bg-[var(--glass-solid)] text-[var(--text-primary)]" value="dangerously-skip-permissions">dangerously-skip-permissions（高风险）</option>
-                  </select>
+                <SettingRow
+                  label="CLI 可执行文件"
+                  desc={
+                    cliPaths.probedAt > 0
+                      ? `检测于 ${new Date(cliPaths.probedAt).toLocaleString("zh-CN", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : "尚未探测"
+                  }
+                >
+                  <div className="flex w-[210px] flex-col items-stretch gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => void reProbe()}
+                      disabled={probing}
+                      className="self-end rounded-md border border-[var(--glass-border)] px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
+                    >
+                      {probing ? "探测中…" : "重新探测"}
+                    </button>
+                    <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-[10px]">
+                      {CLI_CONFIGS.map((config) => {
+                        const path = String(cliPaths[config.id] ?? "");
+                        const found = path.length > 0;
+                        return (
+                          <Fragment key={config.id}>
+                            <span className="text-[var(--text-secondary)]">{config.id}</span>
+                            <span
+                              title={path || "未检测到"}
+                              className="truncate text-right text-[var(--text-secondary)]"
+                            >
+                              {found ? path.split(/[\\/]/).pop() : "未找到"}
+                            </span>
+                          </Fragment>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </SettingRow>
 
+                </SettingSection>
+
+                <SettingSection
+                  title="快捷键"
+                  desc="两处快捷键都可以改；快速启动快捷键清空即视为禁用。"
+                >
                 <SettingRow label="全局快捷键" desc="点击后按下组合键即可修改">
                   <HotkeyInput
                     value={draft.globalHotkey}
                     onChange={(hotkey) => update({ globalHotkey: hotkey })}
                     error={saveError}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  label="快速启动快捷键"
+                  desc="清空即禁用；点击后按下组合键即可修改"
+                >
+                  <HotkeyInput
+                    value={draft.quickHotkey}
+                    onChange={(hotkey) => update({ quickHotkey: hotkey })}
+                    allowEmpty
                   />
                 </SettingRow>
                 <div className="-mt-1 mb-3 ml-auto flex w-[180px] max-w-full flex-col gap-1.5 text-[10px] leading-relaxed">
@@ -292,28 +464,19 @@ export default function SettingsDrawer({
                   >
                     {retryingHotkeys ? "重试中…" : "重试快捷键"}
                   </button>
-                  <div className="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
-                    <span className="text-[var(--text-secondary)]">主窗口</span>
-                    <span
-                      title={hotkeyStatus?.toggleError ?? undefined}
-                      className={`truncate text-right ${hotkeyStatus?.toggleRegistered ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                  {hotkeyConflict && (
+                    <div
+                      role="alert"
+                      className="text-right text-[10px] leading-relaxed break-words text-[var(--danger)]"
                     >
-                      {hotkeyStatus?.toggleRegistered
-                        ? `${hotkeyStatus.toggleHotkey} 已生效`
-                        : hotkeyErrorText(hotkeyStatus?.toggleError)}
-                    </span>
-                    <span className="text-[var(--text-secondary)]">快速启动</span>
-                    <span
-                      title={hotkeyStatus?.quickError ?? undefined}
-                      className={`truncate text-right ${hotkeyStatus?.quickRegistered ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-                    >
-                      {hotkeyStatus?.quickRegistered
-                        ? `${hotkeyStatus.quickHotkey} 已生效`
-                        : hotkeyErrorText(hotkeyStatus?.quickError)}
-                    </span>
-                  </div>
+                      {hotkeyConflict}
+                    </div>
+                  )}
                 </div>
 
+                </SettingSection>
+
+                <SettingSection title="行为">
                 <SettingRow label="关闭时最小化到托盘" desc="点关闭按钮不退出，仅隐藏窗口">
                   <Switch
                     label="关闭时最小化到托盘"
@@ -366,6 +529,12 @@ export default function SettingsDrawer({
                   />
                 </SettingRow>
 
+                </SettingSection>
+
+                <SettingSection
+                  title="磁盘索引"
+                  desc="启动时后台建立一次索引，之后查询只读内存；目录变动可手动重建。"
+                >
                 <SettingRow label="本机磁盘搜索" desc="开启后会在配置的目录范围内查找未收藏项目">
                   <Switch
                     label="本机磁盘搜索"
@@ -400,9 +569,13 @@ export default function SettingsDrawer({
                   />
                 </SettingRow>
 
+                </SettingSection>
+
+                <SettingSection title="数据">
                 <SettingRow label="数据备份" desc="导出为 JSON 文件；导入时按路径合并，不覆盖已有记录">
                   <DataPortControls onImported={onImported} onToast={onToast} />
                 </SettingRow>
+                </SettingSection>
               </div>
 
               {saveError && (

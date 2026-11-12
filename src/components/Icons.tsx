@@ -1,14 +1,15 @@
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 import { icons as logoSet } from "@iconify-json/logos";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
-type BrandLogoName = "visual-studio-code" | "openai-icon" | "claude-code";
+type BrandLogoName = "visual-studio-code" | "openai-icon" | "claude-code" | "opencode-icon";
 
 const BRAND_VIEWBOXES: Record<BrandLogoName, string> = {
   "visual-studio-code": "0 0 256 254",
   "openai-icon": "0 0 260 260",
   "claude-code": "0 0 256 161",
+  "opencode-icon": "0 0 256 321",
 };
 
 function BrandIcon({ name, size = 18, ...props }: IconProps & { name: BrandLogoName }) {
@@ -68,6 +69,60 @@ export const CodexIcon = (p: IconProps) => <BrandIcon {...p} name="openai-icon" 
 
 /** Official Claude Code mark. */
 export const ClaudeIcon = (p: IconProps) => <BrandIcon {...p} name="claude-code" />;
+
+/**
+ * opencode 官方图标。
+ *
+ * 官方配色是 `#cfcecd` 浅灰 + `#211e1e` 近黑，后者在深色主题下会完全消失。
+ * 因此这里给它铺一层浅色圆角底，保证两种主题下都清晰可辨。
+ */
+export const OpencodeIcon = ({ size = 14, ...props }: IconProps) => (
+  <svg
+    {...props}
+    width={size}
+    height={size}
+    viewBox="0 0 256 321"
+    preserveAspectRatio="xMidYMid meet"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <rect x="-4" y="36" width="264" height="250" rx="28" fill="#e8e6e3" />
+    <g
+      dangerouslySetInnerHTML={{ __html: logoSet.icons["opencode-icon"]?.body ?? "" }}
+    />
+  </svg>
+);
+
+/**
+ * omp 官方图标（`omp.sh/favicon.svg`，434 B）。
+ *
+ * 官方 SVG 带一层 `#0f0a14` 圆角底矩形，在小尺寸按钮里会和其它品牌标
+ * 视觉重量不一致，因此去掉底色，只保留 π 字形与渐变。
+ * 渐变 id 用 `useId()` 生成：同一页面会多次渲染该图标，固定 id 会冲突。
+ */
+export const OmpIcon = ({ size = 14, ...props }: IconProps) => {
+  const gradientId = useId();
+  return (
+    <svg
+      {...props}
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ed4abf" />
+          <stop offset=".5" stopColor="#9b4dff" />
+          <stop offset="1" stopColor="#5ad8e6" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${gradientId})`} d="M14 16h36v8H40v32h-8V24h-6v22h-8V24h-4z" />
+    </svg>
+  );
+};
 
 export const CodeIcon = (p: IconProps) => (
   <svg {...base(p)}>

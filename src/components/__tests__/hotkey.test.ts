@@ -37,6 +37,13 @@ describe("formatHotkey", () => {
   it("rejects modifier-only presses", () => {
     expect(formatHotkey(key({ key: "Control", ctrlKey: true }))).toBeNull();
     expect(formatHotkey(key({ key: "Shift", shiftKey: true }))).toBeNull();
+    expect(formatHotkey(key({ key: "Alt", altKey: true }))).toBeNull();
+  });
+
+  it("accepts the Win key as a standalone modifier", () => {
+    // 默认快速启动快捷键是 Win+Space，必须允许 Super 出现在组合里。
+    expect(formatHotkey(key({ key: "Meta", metaKey: true }))).toBe("Super");
+    expect(formatHotkey(key({ key: " ", metaKey: true }))).toBe("Super+Space");
   });
 
   it("maps special keys to plugin names", () => {

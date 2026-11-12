@@ -14,12 +14,19 @@ import { excludeKnownPaths, folderPathSet } from "./lib/disk";
 import { projectStyle } from "./lib/project";
 import { useDiskIndex } from "./hooks/useDiskIndex";
 import { useAppStore } from "./stores/useAppStore";
-import { detectCliAgents, openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
+import { openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
 import OpenWithBar from "./components/OpenWithBar";
-import type { CliAgentStatus, FolderRecord, QuickEnterAction, SearchHit } from "./lib/types";
+import type { FolderRecord, QuickEnterAction, SearchHit } from "./lib/types";
 import { SearchIcon } from "./components/Icons";
 
 const quickWindow = () => getCurrentWindow();
+
+/**
+ * 浮窗空闲多久后自动收起（毫秒）。
+ *
+ * 8 秒足够扫一眼列表再决定，又不会长时间占据屏幕中央。
+ */
+const IDLE_DISMISS_MS = 8000;
 
 /** 隐藏浮窗并清空输入。 */
 async function dismiss() {
@@ -36,41 +43,43 @@ const ENTER_LABEL: Record<QuickEnterAction, string> = {
   vscode: "VS Code 打开",
   codex: "启动 Codex",
   claude: "启动 Claude",
+  omp: "启动 omp",
+  opencode: "启动 opencode",
 };
 
 export default function QuickLaunch() {
-  const { folders, settings, loaded, load, openPath } = useAppStore();
+  const { folders, settings, loaded, load, openPath, cliStatus, refreshCliStatus } = useAppStore();
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [agents, setAgents] = useState<CliAgentStatus | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
 
-  // 首次挂载：加载数据并聚焦输入框。
+  // 首次挂载：加载数据、探测 CLI 可用性并聚焦输入框。
   useEffect(() => {
     void load().catch(() => {});
+    void refreshCliStatus().catch(() => {});
     inputRef.current?.focus();
-  }, [load]);
-
-  // CLI 可用性只探测一次，用来控制图标禁用态。
-  useEffect(() => {
-    void detectCliAgents()
-      .then(setAgents)
-      .catch(() => setAgents(null));
-  }, []);
+  }, [load, refreshCliStatus]);
 
   /**
-   * 每次窗口重新获得焦点时刷新数据。
+   * 窗口焦点变化：获得焦点时刷新数据，失去焦点时自动收起。
    *
    * 浮窗与主窗口是两个独立的 WebView，各自持有独立的 store。
    * 窗口隐藏时组件并不会卸载，所以只在挂载时 `load()` 会导致：
    * 在主窗口新增/删除记录后，浮窗里仍是旧列表。
+   *
+   * 「点击界面之外自动关闭」依靠失焦事件实现：用户点任何别的地方，
+   * 浮窗都会立刻收起，不需要再按 Esc。
    */
   useEffect(() => {
     const unlisten = quickWindow().onFocusChanged(({ payload }) => {
-      if (!payload) return;
+      if (!payload) {
+        // 失效即收起；dismiss 是幂等的（已隐藏时再隐藏无副作用）。
+        void dismiss();
+        return;
+      }
       inputRef.current?.focus();
       inputRef.current?.select();
       void load().catch(() => {});
@@ -79,6 +88,41 @@ export default function QuickLaunch() {
       void unlisten.then((fn) => fn());
     };
   }, [load]);
+
+  /**
+   * 空闲自动关闭。
+   *
+   * 浮窗弹出后如果一直没人管，就会挡在屏幕中央；这里在最后一次
+   * 键盘/鼠标操作之后倒计时，超时就收起。任何交互都会重置计时。
+   */
+  useEffect(() => {
+    let timer: number | undefined;
+
+    const reset = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void dismiss();
+      }, IDLE_DISMISS_MS);
+    };
+
+    const events: (keyof WindowEventMap)[] = [
+      "keydown",
+      "mousemove",
+      "mousedown",
+      "wheel",
+      "input",
+      // 重新呼出浮窗时也会触发 focus，计时器随之重新开始；
+      // 否则关掉一次之后，下次打开就不会再自动收起了。
+      "focus",
+    ];
+    events.forEach((name) => window.addEventListener(name, reset, true));
+    reset();
+
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((name) => window.removeEventListener(name, reset, true));
+    };
+  }, []);
 
   const { hits, status } = useDiskIndex(query, settings.scanEnabled, 6);
   const fuse = useMemo(() => createFolderSearch(folders), [folders]);
@@ -115,7 +159,7 @@ export default function QuickLaunch() {
     async (row: QuickRow, action: QuickEnterAction) => {
       const path = row.kind === "record" ? row.record.path : row.hit.path;
       try {
-        if (action === "codex" || action === "claude") {
+        if (action === "codex" || action === "claude" || action === "omp" || action === "opencode") {
           // record=true：磁盘结果打开后立即进入历史，下次直接出现在第一段。
           await openCliAgent(path, action, true);
         } else {
@@ -170,21 +214,8 @@ export default function QuickLaunch() {
       if (event.key === "Enter") {
         event.preventDefault();
         if (!target) return;
-        void perform(target, event.ctrlKey ? "vscode" : settings.quickEnterAction);
+        void perform(target, settings.quickEnterAction);
         return;
-      }
-
-      if (!event.ctrlKey || !target) return;
-      if (event.key === "1") {
-        event.preventDefault();
-        void perform(target, "codex");
-      } else if (event.key === "2") {
-        event.preventDefault();
-        void perform(target, "claude");
-      } else if (event.key === "3") {
-        event.preventDefault();
-        const path = target.kind === "record" ? target.record.path : target.hit.path;
-        void revealInExplorer(path).catch((err: unknown) => setError(errorText(err)));
       }
     };
 
@@ -298,10 +329,12 @@ export default function QuickLaunch() {
                   {showIcons && (
                     <OpenWithBar
                       active={index === selected}
-                      available={agents}
+                      available={cliStatus}
                       onVscode={() => void perform(row, "vscode")}
                       onCodex={() => void perform(row, "codex")}
                       onClaude={() => void perform(row, "claude")}
+                      onOmp={() => void perform(row, "omp")}
+                      onOpencode={() => void perform(row, "opencode")}
                       onReveal={() =>
                         void revealInExplorer(path).catch((err: unknown) =>
                           setError(errorText(err)),
@@ -326,9 +359,7 @@ export default function QuickLaunch() {
         <span className="flex min-w-0 items-center gap-1.5 truncate">
           <span className="kbd">↑↓</span>
           <span>Enter {ENTER_LABEL[settings.quickEnterAction]}</span>
-          {showIcons && (
-            <span className="truncate opacity-75">· ⌃↵ VS Code · ⌃1 Codex · ⌃2 Claude</span>
-          )}
+          {showIcons && <span className="truncate opacity-75">· 点击右侧图标切换打开方式</span>}
         </span>
         <span className="shrink-0">
           {status?.ready ? `索引 ${status.entries}` : `${folders.length} 个文件夹`}

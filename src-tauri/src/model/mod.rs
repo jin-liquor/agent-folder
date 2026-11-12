@@ -8,7 +8,7 @@ mod folder;
 mod settings;
 
 pub use folder::FolderRecord;
-pub use settings::AppSettings;
+pub use settings::{builtin_presets, AppSettings, CliPaths};
 
 /// 当前 Unix 时间戳（毫秒），作为全应用统一的时间来源。
 pub fn now_ms() -> i64 {

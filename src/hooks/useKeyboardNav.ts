@@ -11,6 +11,8 @@ interface Options {
   onOpen: (row: Row) => void;
   onFavorite: (row: Row) => void;
   onRemove: (row: Row) => void;
+  /** Shift+F10 打开当前行的操作菜单。 */
+  onContextMenu: (row: Row) => void;
   onFocusSearch: () => void;
   onOpenSettings: () => void;
   settingsOpen: boolean;
@@ -28,6 +30,7 @@ export function useKeyboardNav({
   onOpen,
   onFavorite,
   onRemove,
+  onContextMenu,
   onFocusSearch,
   onOpenSettings,
   settingsOpen,
@@ -79,6 +82,14 @@ export function useKeyboardNav({
         onOpen(row);
         return;
       }
+      // Shift+F10 是 Windows 上「打开上下文菜单」的键盘等价操作。
+      if (event.key === "F10" && event.shiftKey) {
+        const row = rows[selected];
+        if (!row || row.kind !== "record") return;
+        event.preventDefault();
+        onContextMenu(row);
+        return;
+      }
 
       const row = rows[selected];
       if (!row || row.kind !== "record") return;
@@ -100,6 +111,7 @@ export function useKeyboardNav({
     onOpen,
     onFavorite,
     onRemove,
+    onContextMenu,
     onFocusSearch,
     onOpenSettings,
     settingsOpen,

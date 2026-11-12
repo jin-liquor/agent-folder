@@ -54,8 +54,47 @@ export interface IndexSearchResult {
   warnings: string[];
 }
 
+/** 支持的 CLI 工具标识。 */
+export type CliAgentId = "codex" | "claude" | "omp" | "opencode";
+
 /** 快速启动浮窗中按 Enter 的默认动作。 */
-export type QuickEnterAction = "defaultEditor" | "vscode" | "codex" | "claude";
+export type QuickEnterAction =
+  | "defaultEditor"
+  | "vscode"
+  | "codex"
+  | "claude"
+  | "omp"
+  | "opencode";
+
+/** omp 的启动方式：直接启动 exe，或新开 PowerShell 窗口。 */
+export type OmpLaunchStyle = "direct" | "powershell";
+
+/** 一个启动模式预设；`builtin` 为真时不可改名或删除。 */
+export interface CliPreset {
+  id: string;
+  name: string;
+  /** 参数串，语法见 Rust `services::cli_args::split_args`。 */
+  args: string;
+  builtin: boolean;
+}
+
+/** 各 CLI 的用户自建预设（内置预设由代码提供，不在数据里）。 */
+export interface CliPresets {
+  codex: CliPreset[];
+  claude: CliPreset[];
+  omp: CliPreset[];
+  opencode: CliPreset[];
+}
+
+/** 探测到的 CLI 可执行文件路径；空串表示未检测到。 */
+export interface CliPaths {
+  codex: string;
+  claude: string;
+  omp: string;
+  opencode: string;
+  /** 探测时间戳（毫秒），0 表示从未探测。 */
+  probedAt: number;
+}
 
 /** 用户设置。 */
 export interface AppSettings {
@@ -69,16 +108,32 @@ export interface AppSettings {
   searchRoots: string[];
   scanEnabled: boolean;
   editorPathOverride?: string | null;
-  codexMode: "default" | "danger-full-access" | "yolo";
-  claudeMode: "default" | "acceptEdits" | "dangerously-skip-permissions";
+  /** 各 CLI 当前选中的预设 id。 */
+  codexMode: string;
+  claudeMode: string;
+  ompMode: string;
+  opencodeMode: string;
+  /** 用户自建的 CLI 启动模式预设。 */
+  cliPresets: CliPresets;
+  /** 旧字段，仅用于一次性迁移到 `cliPresets`。 */
+  codexExtraArgs: string;
+  claudeExtraArgs: string;
+  ompExtraArgs: string;
+  opencodeExtraArgs: string;
+  ompLaunchStyle: OmpLaunchStyle;
+  cliPaths: CliPaths;
   quickEnterAction: QuickEnterAction;
   quickOpenWith: boolean;
+  /** 快速启动浮窗的全局快捷键；空串表示主动禁用。 */
+  quickHotkey: string;
 }
 
 /** CLI 工具可用性。 */
 export interface CliAgentStatus {
   codex: boolean;
   claude: boolean;
+  omp: boolean;
+  opencode: boolean;
 }
 
 export interface StorageStatus {
@@ -104,6 +159,70 @@ export interface EditorInfo {
   command?: string | null;
 }
 
+/** 空的 CLI 路径缓存。 */
+export const EMPTY_CLI_PATHS: CliPaths = {
+  codex: "",
+  claude: "",
+  omp: "",
+  opencode: "",
+  probedAt: 0,
+};
+
+/** 空的用户预设集合。 */
+export const EMPTY_CLI_PRESETS: CliPresets = {
+  codex: [],
+  claude: [],
+  omp: [],
+  opencode: [],
+};
+
+/**
+ * 内置预设，必须与 Rust `model::settings::builtin_presets` 保持一致。
+ *
+ * 前端需要它们来渲染下拉栏（内置项不存进 `data.json`）。
+ */
+export const BUILTIN_PRESETS: Record<CliAgentId, CliPreset[]> = {
+  codex: [
+    { id: "default", name: "默认", args: "", builtin: true },
+    {
+      id: "danger-full-access",
+      name: "danger-full-access（高风险）",
+      args: "--sandbox danger-full-access",
+      builtin: true,
+    },
+    { id: "yolo", name: "yolo（高风险）", args: "--yolo", builtin: true },
+  ],
+  claude: [
+    { id: "default", name: "默认", args: "", builtin: true },
+    {
+      id: "acceptEdits",
+      name: "acceptEdits",
+      args: "--permission-mode acceptEdits",
+      builtin: true,
+    },
+    {
+      id: "dangerously-skip-permissions",
+      name: "跳过权限确认（高风险）",
+      args: "--dangerously-skip-permissions",
+      builtin: true,
+    },
+  ],
+  omp: [
+    { id: "default", name: "默认", args: "", builtin: true },
+    { id: "yolo", name: "yolo（自动批准）", args: "--auto-approve", builtin: true },
+  ],
+  opencode: [
+    { id: "default", name: "默认", args: "", builtin: true },
+    { id: "auto", name: "auto（自动批准）", args: "--auto", builtin: true },
+  ],
+};
+
+/** 快速启动快捷键的默认值，与 Rust `DEFAULT_QUICK_HOTKEY` 保持一致。 */
+export const DEFAULT_QUICK_HOTKEY = "Ctrl+Space";
+
+/** 1.1.1 及更早版本的默认值，用于一次性迁移，与 Rust 端保持一致。 */
+export const LEGACY_QUICK_HOTKEYS: readonly string[] = ["Ctrl+Shift+Space", "Super+Space"];
+
 /** 默认设置：与 Rust `AppSettings::default()` 保持一致。 */
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "dark",
@@ -118,6 +237,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   editorPathOverride: null,
   codexMode: "default",
   claudeMode: "default",
+  ompMode: "default",
+  opencodeMode: "default",
+  cliPresets: EMPTY_CLI_PRESETS,
+  codexExtraArgs: "",
+  claudeExtraArgs: "",
+  ompExtraArgs: "",
+  opencodeExtraArgs: "",
+  ompLaunchStyle: "direct",
+  cliPaths: EMPTY_CLI_PATHS,
   quickEnterAction: "defaultEditor",
   quickOpenWith: true,
+  quickHotkey: DEFAULT_QUICK_HOTKEY,
 };
