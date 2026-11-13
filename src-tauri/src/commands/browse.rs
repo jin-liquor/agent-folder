@@ -52,22 +52,27 @@ pub fn list_subdirs(path: String) -> Result<Vec<DirEntry>, String> {
 
     let entries = std::fs::read_dir(dir).map_err(|e| format!("读取目录失败：{e}"))?;
 
-    let mut dirs: Vec<DirEntry> = entries
+    let mut dirs: Vec<(String, std::path::PathBuf)> = entries
         .flatten()
         .filter(|entry| entry.file_type().map(|t| t.is_dir()).unwrap_or(false))
-        .take(MAX_ENTRIES)
         .map(|entry| {
-            let full = entry.path();
-            DirEntry {
-                name: entry.file_name().to_string_lossy().to_string(),
-                path: full.to_string_lossy().to_string(),
-                has_children: has_subdir(&full),
-            }
+            (
+                entry.file_name().to_string_lossy().to_string(),
+                entry.path(),
+            )
         })
         .collect();
 
-    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    Ok(dirs)
+    dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    Ok(dirs
+        .into_iter()
+        .take(MAX_ENTRIES)
+        .map(|(name, path)| DirEntry {
+            has_children: has_subdir(&path),
+            name,
+            path: path.to_string_lossy().to_string(),
+        })
+        .collect())
 }
 
 /// 判断目录下是否还有子目录（只探测到第一个命中即返回）。

@@ -19,13 +19,27 @@ pub struct CliPaths {
     pub claude: String,
     pub omp: String,
     pub opencode: String,
+    /// 用户手动指定的路径；存在时自动探测不得覆盖它。
+    #[serde(default)]
+    pub codex_override: Option<String>,
+    #[serde(default)]
+    pub claude_override: Option<String>,
+    #[serde(default)]
+    pub omp_override: Option<String>,
+    #[serde(default)]
+    pub opencode_override: Option<String>,
     /// 探测时间戳（毫秒）。0 表示从未探测过。
     pub probed_at: u64,
 }
 
 impl CliPaths {
-    /// 读取某个 CLI 的缓存路径。
+    /// 读取某个 CLI 的有效路径，手动覆盖优先。
     pub fn get(&self, agent: CliAgent) -> &str {
+        self.manual(agent).unwrap_or_else(|| self.detected(agent))
+    }
+
+    /// 读取自动探测缓存，不考虑手动覆盖。
+    pub fn detected(&self, agent: CliAgent) -> &str {
         match agent {
             CliAgent::Codex => &self.codex,
             CliAgent::Claude => &self.claude,
@@ -34,7 +48,17 @@ impl CliPaths {
         }
     }
 
-    /// 写入某个 CLI 的路径。
+    /// 读取手动覆盖值。
+    pub fn manual(&self, agent: CliAgent) -> Option<&str> {
+        match agent {
+            CliAgent::Codex => self.codex_override.as_deref(),
+            CliAgent::Claude => self.claude_override.as_deref(),
+            CliAgent::Omp => self.omp_override.as_deref(),
+            CliAgent::Opencode => self.opencode_override.as_deref(),
+        }
+    }
+
+    /// 写入某个 CLI 的自动探测路径。
     pub fn set(&mut self, agent: CliAgent, value: String) {
         match agent {
             CliAgent::Codex => self.codex = value,
@@ -44,23 +68,38 @@ impl CliPaths {
         }
     }
 
+    /// 设置或清除手动覆盖值；空白值按清除处理。
+    pub fn set_manual(&mut self, agent: CliAgent, value: Option<String>) {
+        let value = value.and_then(|path| {
+            let trimmed = path.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        });
+        match agent {
+            CliAgent::Codex => self.codex_override = value,
+            CliAgent::Claude => self.claude_override = value,
+            CliAgent::Omp => self.omp_override = value,
+            CliAgent::Opencode => self.opencode_override = value,
+        }
+    }
+
     /// 缓存是否全部为空（从未探测）。
     pub fn is_empty(&self) -> bool {
         self.codex.is_empty()
             && self.claude.is_empty()
             && self.omp.is_empty()
             && self.opencode.is_empty()
+            && CliAgent::ALL
+                .iter()
+                .all(|agent| self.manual(*agent).is_none())
     }
 
-    /// 缓存里是否存在已失效的路径（文件被删除或移动）。
-    ///
-    /// 只有「记录了路径但文件不在」才算失效；空串表示未检测到，不算失效。
+    /// 缓存里是否存在已失效的自动探测路径。
     pub fn has_stale_entry(&self) -> bool {
         [
-            self.codex.as_str(),
-            self.claude.as_str(),
-            self.omp.as_str(),
-            self.opencode.as_str(),
+            self.detected(CliAgent::Codex),
+            self.detected(CliAgent::Claude),
+            self.detected(CliAgent::Omp),
+            self.detected(CliAgent::Opencode),
         ]
         .into_iter()
         .any(|path| !path.is_empty() && !std::path::Path::new(path).is_file())
@@ -184,6 +223,7 @@ pub fn builtin_preset_ids(agent: CliAgent) -> Vec<&'static str> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
+    pub language: String,
     pub theme: String,
     pub default_editor: String,
     pub global_hotkey: String,
@@ -296,12 +336,6 @@ impl AppSettings {
             }
 
             // 用户预设的 id / 名称不能为空，参数可为空。
-            let existing_ids: Vec<String> = self
-                .cli_presets
-                .get(agent)
-                .iter()
-                .map(|p| p.id.clone())
-                .collect();
             let mut cleaned: Vec<CliPreset> = Vec::new();
             for preset in self.cli_presets.get(agent).iter() {
                 let mut preset = preset.clone();
@@ -325,13 +359,13 @@ impl AppSettings {
                 preset.builtin = false;
                 cleaned.push(preset);
             }
-            let _ = existing_ids;
             if cleaned != self.cli_presets.get(agent) {
                 *self.cli_presets.get_mut(agent) = cleaned;
                 changed = true;
             }
         }
 
+        changed |= reset_if_invalid(&mut self.language, &["zh-CN", "en-US"], "zh-CN");
         changed |= reset_if_invalid(
             &mut self.quick_enter_action,
             &QUICK_ACTIONS,
@@ -429,6 +463,7 @@ fn reset_if_invalid(value: &mut String, allowed: &[&str], fallback: &str) -> boo
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            language: "zh-CN".into(),
             theme: "dark".into(),
             default_editor: "vscode".into(),
             global_hotkey: "Ctrl+Alt+V".into(),

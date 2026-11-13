@@ -251,21 +251,28 @@ pub fn search_entries(entries: &[Entry], query: &str, limit: usize) -> Vec<Searc
         return Vec::new();
     }
 
-    let mut scored: Vec<(i32, &Entry)> = entries
+    let mut scored: Vec<(i32, usize, &Entry)> = entries
         .iter()
-        .filter_map(|entry| score(&entry.name_lower, &needle, entry.depth).map(|s| (s, entry)))
+        .enumerate()
+        .filter_map(|(index, entry)| {
+            score(&entry.name_lower, &needle, entry.depth).map(|score| (score, index, entry))
+        })
         .collect();
 
-    // 分数降序；同分时短路径优先，保证结果稳定。
-    scored.sort_by(|a, b| {
+    let rank = |a: &(i32, usize, &Entry), b: &(i32, usize, &Entry)| {
         b.0.cmp(&a.0)
-            .then_with(|| a.1.path.len().cmp(&b.1.path.len()))
-    });
-    scored.truncate(limit);
+            .then_with(|| a.2.path.len().cmp(&b.2.path.len()))
+            .then_with(|| a.1.cmp(&b.1))
+    };
+    if scored.len() > limit {
+        scored.select_nth_unstable_by(limit, rank);
+        scored.truncate(limit);
+    }
+    scored.sort_by(rank);
 
     scored
         .into_iter()
-        .map(|(score, entry)| SearchHit {
+        .map(|(score, _, entry)| SearchHit {
             name: display_name_of(&entry.path),
             path: entry.path.clone(),
             depth: entry.depth,

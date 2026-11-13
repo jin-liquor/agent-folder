@@ -6,12 +6,14 @@
 import { useState } from "react";
 import * as commands from "../lib/commands";
 import { errorText } from "../lib/errors";
+import type { Language } from "../lib/i18n";
 import { pickOpenPath, pickSavePath } from "../lib/system";
 
 interface Props {
   /** 操作完成后通知外层刷新列表与提示。 */
   onImported: () => void;
   onToast: (message: string) => void;
+  language: Language;
 }
 
 const JSON_FILTER = [{ name: "JSON 文件", extensions: ["json"] }];
@@ -24,7 +26,9 @@ function defaultFileName(): string {
   return `agent-folder-${stamp}.json`;
 }
 
-export default function DataPortControls({ onImported, onToast }: Props) {
+export default function DataPortControls({ onImported, onToast, language }: Props) {
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
 
   const handleExport = async () => {
@@ -33,9 +37,9 @@ export default function DataPortControls({ onImported, onToast }: Props) {
       const path = await pickSavePath(defaultFileName(), JSON_FILTER);
       if (!path) return;
       const count = await commands.exportData(path);
-      onToast(`已导出 ${count} 条记录`);
+      onToast(text(`已导出 ${count} 条记录`, `Exported ${count} records`));
     } catch (error) {
-      onToast(`导出失败：${errorText(error)}`);
+      onToast(text(`导出失败：${errorText(error)}`, `Export failed: ${errorText(error)}`));
     } finally {
       setBusy(null);
     }
@@ -48,12 +52,16 @@ export default function DataPortControls({ onImported, onToast }: Props) {
       if (!path) return;
       const summary = await commands.importData(path);
       onImported();
-      const parts = [`新增并保留 ${summary.added} 条`];
-      if (summary.trimmed > 0) parts.push(`因容量上限裁剪 ${summary.trimmed} 条`);
-      if (summary.skipped > 0) parts.push(`跳过 ${summary.skipped} 条（已存在或无效）`);
-      onToast(`导入完成：${parts.join("，")}`);
+      const parts = [text(`新增并保留 ${summary.added} 条`, `Added and kept ${summary.added}`)];
+      if (summary.trimmed > 0) {
+        parts.push(text(`因容量上限裁剪 ${summary.trimmed} 条`, `Trimmed ${summary.trimmed} at the storage limit`));
+      }
+      if (summary.skipped > 0) {
+        parts.push(text(`跳过 ${summary.skipped} 条（已存在或无效）`, `Skipped ${summary.skipped} (existing or invalid)`));
+      }
+      onToast(text(`导入完成：${parts.join("，")}`, `Import complete: ${parts.join(", ")}`));
     } catch (error) {
-      onToast(`导入失败：${errorText(error)}`);
+      onToast(text(`导入失败：${errorText(error)}`, `Import failed: ${errorText(error)}`));
     } finally {
       setBusy(null);
     }
@@ -67,7 +75,7 @@ export default function DataPortControls({ onImported, onToast }: Props) {
         disabled={busy !== null}
         className="rounded-md border border-[var(--glass-border)] px-2 py-1 text-[11px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
       >
-        {busy === "export" ? "导出中…" : "导出"}
+        {busy === "export" ? text("导出中…", "Exporting…") : text("导出", "Export")}
       </button>
       <button
         type="button"
@@ -75,7 +83,7 @@ export default function DataPortControls({ onImported, onToast }: Props) {
         disabled={busy !== null}
         className="rounded-md border border-[var(--glass-border)] px-2 py-1 text-[11px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-50"
       >
-        {busy === "import" ? "导入中…" : "导入"}
+        {busy === "import" ? text("导入中…", "Importing…") : text("导入", "Import")}
       </button>
     </div>
   );

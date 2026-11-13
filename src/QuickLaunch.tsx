@@ -8,6 +8,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { errorText } from "./lib/errors";
+import * as system from "./lib/system";
+import { t } from "./lib/i18n";
 import { createFolderSearch, hasQuery } from "./lib/search";
 import { shortenPath } from "./lib/path";
 import { excludeKnownPaths, folderPathSet } from "./lib/disk";
@@ -37,15 +39,26 @@ type QuickRow =
   | { kind: "record"; record: FolderRecord }
   | { kind: "disk"; hit: SearchHit };
 
-/** 底部提示里的 Enter 文案，跟随设置变化。 */
-const ENTER_LABEL: Record<QuickEnterAction, string> = {
-  defaultEditor: "打开",
-  vscode: "VS Code 打开",
-  codex: "启动 Codex",
-  claude: "启动 Claude",
-  omp: "启动 omp",
-  opencode: "启动 opencode",
-};
+function enterLabel(action: QuickEnterAction, english: boolean): string {
+  if (english) {
+    return {
+      defaultEditor: "Open",
+      vscode: "Open in VS Code",
+      codex: "Launch Codex",
+      claude: "Launch Claude",
+      omp: "Launch omp",
+      opencode: "Launch opencode",
+    }[action];
+  }
+  return {
+    defaultEditor: "打开",
+    vscode: "VS Code 打开",
+    codex: "启动 Codex",
+    claude: "启动 Claude",
+    omp: "启动 omp",
+    opencode: "启动 opencode",
+  }[action];
+}
 
 export default function QuickLaunch() {
   const { folders, settings, loaded, load, openPath, cliStatus, refreshCliStatus } = useAppStore();
@@ -55,6 +68,21 @@ export default function QuickLaunch() {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void system
+      .onSettingsChanged(() => void useAppStore.getState().reloadSettings())
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   // 首次挂载：加载数据、探测 CLI 可用性并聚焦输入框。
   useEffect(() => {
@@ -166,7 +194,11 @@ export default function QuickLaunch() {
           const result =
             action === "vscode" ? await openInEditor(path, "vscode") : await openPath(path);
           if (!result.historySaved) {
-            setError(`已打开，但历史记录未保存：${result.historyError ?? "请稍后重试"}`);
+            setError(
+              settings.language === "en-US"
+                ? `Opened, but history was not saved: ${result.historyError ?? "Please try again later"}`
+                : `已打开，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+            );
             return;
           }
         }
@@ -178,7 +210,7 @@ export default function QuickLaunch() {
         setError(errorText(err));
       }
     },
-    [openPath],
+    [openPath, settings.language],
   );
 
   /**
@@ -245,8 +277,8 @@ export default function QuickLaunch() {
             composing.current = false;
             setQuery(event.currentTarget.value);
           }}
-          placeholder="搜索文件夹，或直接搜整盘…"
-          aria-label="快速搜索文件夹"
+          placeholder={t(settings.language, "searchPlaceholder")}
+          aria-label={t(settings.language, "searchAria")}
           spellCheck={false}
           className="h-full flex-1 bg-transparent text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
         />
@@ -256,7 +288,7 @@ export default function QuickLaunch() {
       {settings.scanEnabled && status && !status.ready && status.building && (
         <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--glass-border)] bg-[var(--canvas-subtle)] px-3 text-[10px] text-[var(--text-secondary)]">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-          正在建立磁盘索引 · 已扫描 {status.scanned} 个目录
+          {t(settings.language, "diskIndexing")} · {t(settings.language, "scannedDirectories")} {status.scanned}
         </div>
       )}
 
@@ -269,13 +301,17 @@ export default function QuickLaunch() {
           <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center text-[12px] text-[var(--text-secondary)]">
             {hasQuery(query) ? (
               <>
-                <span>没有匹配「{query}」的文件夹</span>
+                <span>
+                  {settings.language === "zh-CN"
+                    ? `没有匹配「${query}」的文件夹`
+                    : `No folders match “${query}”`}
+                </span>
                 {settings.scanEnabled && status && !status.ready && (
-                  <span className="text-[10px]">磁盘索引尚未就绪，稍候再试</span>
+                  <span className="text-[10px]">{t(settings.language, "indexNotReady")}</span>
                 )}
               </>
             ) : (
-              <span>还没有记录，先在主界面添加</span>
+              <span>{t(settings.language, "noRecords")}</span>
             )}
           </div>
         ) : (
@@ -290,7 +326,7 @@ export default function QuickLaunch() {
               <Fragment key={isRecord ? row.record.id : `disk-${row.hit.path}`}>
                 {index === firstDiskIndex && (
                   <div className="px-4 pt-2 pb-1 text-[10px] font-semibold tracking-wide text-[var(--text-secondary)] uppercase">
-                    磁盘 · {rows.length - firstDiskIndex} 个命中
+                    {t(settings.language, "disk")} · {rows.length - firstDiskIndex} {t(settings.language, "hits")}
                   </div>
                 )}
                 <div
@@ -309,7 +345,7 @@ export default function QuickLaunch() {
                   </span>
                   {!isRecord && (
                     <span className="shrink-0 rounded-md border border-[var(--glass-border)] px-1 py-px text-[9px] leading-[13px] text-[var(--text-secondary)]">
-                      磁盘
+                      {t(settings.language, "disk")}
                     </span>
                   )}
                   {project && (
@@ -329,6 +365,7 @@ export default function QuickLaunch() {
                   {showIcons && (
                     <OpenWithBar
                       active={index === selected}
+                      language={settings.language}
                       available={cliStatus}
                       onVscode={() => void perform(row, "vscode")}
                       onCodex={() => void perform(row, "codex")}
@@ -358,11 +395,17 @@ export default function QuickLaunch() {
       <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-[var(--glass-border)] bg-[var(--canvas-subtle)] px-3 text-[10px] text-[var(--text-secondary)]">
         <span className="flex min-w-0 items-center gap-1.5 truncate">
           <span className="kbd">↑↓</span>
-          <span>Enter {ENTER_LABEL[settings.quickEnterAction]}</span>
-          {showIcons && <span className="truncate opacity-75">· 点击右侧图标切换打开方式</span>}
+          <span>
+            Enter {enterLabel(settings.quickEnterAction, settings.language === "en-US")}
+          </span>
+          {showIcons && (
+            <span className="truncate opacity-75">· {t(settings.language, "clickToChange")}</span>
+          )}
         </span>
         <span className="shrink-0">
-          {status?.ready ? `索引 ${status.entries}` : `${folders.length} 个文件夹`}
+          {status?.ready
+            ? `${t(settings.language, "indexCount")} ${status.entries}`
+            : `${folders.length} ${t(settings.language, "folderCount")}`}
         </span>
       </div>
     </div>

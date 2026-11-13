@@ -6,11 +6,14 @@
  */
 import { useEffect, useRef, useState } from "react";
 
+import type { Language } from "../lib/i18n";
+
 interface Props {
   /** 当前标签，用于初始化输入框。 */
   tags: string[];
   onSubmit: (tags: string[]) => void;
   onClose: () => void;
+  language: Language;
 }
 
 /** 把输入串拆成标签数组，支持中英文逗号与顿号。 */
@@ -21,7 +24,9 @@ export function parseTags(input: string): string[] {
     .filter(Boolean);
 }
 
-export default function TagEditor({ tags, onSubmit, onClose }: Props) {
+export default function TagEditor({ tags, onSubmit, onClose, language }: Props) {
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
   const [draft, setDraft] = useState(tags.join(", "));
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -40,16 +45,16 @@ export default function TagEditor({ tags, onSubmit, onClose }: Props) {
       className="absolute right-2 z-40 mt-1 w-[220px] rounded-xl border border-[var(--glass-border)] bg-[var(--glass-solid)] p-2.5 shadow-2xl"
       onClick={(event) => event.stopPropagation()}
       role="dialog"
-      aria-label="编辑标签"
+      aria-label={text("编辑标签", "Edit tags")}
     >
       <div className="mb-1.5 text-[10px] font-medium text-[var(--text-secondary)]">
-        标签（逗号分隔）
+        {text("标签（逗号分隔）", "Tags (comma-separated)")}
       </div>
       <input
         ref={inputRef}
         value={draft}
-        aria-label="标签输入"
-        placeholder="例如：rust, 工具"
+        aria-label={text("标签输入", "Tag input")}
+        placeholder={text("例如：rust, 工具", "e.g. rust, tools")}
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
@@ -70,14 +75,14 @@ export default function TagEditor({ tags, onSubmit, onClose }: Props) {
           onClick={onClose}
           className="rounded-md px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)]"
         >
-          取消
+          {text("取消", "Cancel")}
         </button>
         <button
           type="button"
           onClick={commit}
           className="rounded-md border border-[var(--accent)] px-2 py-1 text-[10px] text-[var(--accent)] transition hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
         >
-          保存
+          {text("保存", "Save")}
         </button>
       </div>
     </div>

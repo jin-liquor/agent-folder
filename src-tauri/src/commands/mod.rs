@@ -61,6 +61,7 @@ macro_rules! app_commands {
             $crate::commands::get_hotkey_status,
             $crate::commands::retry_hotkeys,
             $crate::commands::refresh_cli_paths,
+            $crate::commands::set_cli_path,
             $crate::commands::save_settings,
             $crate::commands::export_data,
             $crate::commands::import_data,

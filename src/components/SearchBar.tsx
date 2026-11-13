@@ -1,10 +1,12 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
+import type { Language } from "../lib/i18n";
 import { SearchIcon } from "./Icons";
 
 interface Props {
   value: string;
   onChange: (v: string) => void;
   scanning: boolean;
+  language: Language;
 }
 
 /**
@@ -14,7 +16,7 @@ interface Props {
  * 组合结束后再提交，避免拼音串引起的结果抖动。
  */
 const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar(
-  { value, onChange, scanning },
+  { value, onChange, scanning, language },
   ref,
 ) {
   const [draft, setDraft] = useState(value);
@@ -42,27 +44,27 @@ const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar(
             composing.current = false;
             onChange(event.currentTarget.value);
           }}
-          placeholder="搜索文件夹名称或路径…"
-          aria-label="搜索文件夹"
+          placeholder={language === "en-US" ? "Search folders or the whole disk…" : "搜索文件夹名称或路径…"}
+          aria-label={language === "en-US" ? "Quick folder search" : "搜索文件夹"}
           spellCheck={false}
           className="h-full flex-1 bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
         />
         {scanning && (
           <span
             className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--accent)]"
-            title="正在搜索…"
+            title={language === "en-US" ? "Searching…" : "正在搜索…"}
           />
         )}
         {draft ? (
           <button
-            aria-label="清空搜索"
+            aria-label={language === "en-US" ? "Clear search" : "清空搜索"}
             onClick={() => {
               setDraft("");
               onChange("");
             }}
             className="rounded-md px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)] transition hover:bg-[var(--hover-subtle)] hover:text-[var(--text-primary)]"
           >
-            清除
+            {language === "en-US" ? "Clear" : "清除"}
           </button>
         ) : (
           <span className="kbd">Ctrl K</span>

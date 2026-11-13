@@ -4,6 +4,7 @@
  * 与 `commands.ts` 分开的原因：这里走的是 Tauri 的 JS API
  * （窗口控制、对话框、剪贴板、自启动），不是自定义后端命令。
  */
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -11,8 +12,11 @@ import * as autostart from "@tauri-apps/plugin-autostart";
 
 const currentWindow = () => getCurrentWindow();
 
-/** 最小化到系统托盘（隐藏窗口，进程继续运行）。 */
+/** 隐藏到系统托盘；只用于明确的隐藏行为。 */
 export const hideWindow = () => currentWindow().hide();
+
+/** 原生最小化，窗口仍保留任务栏按钮。 */
+export const minimizeWindow = () => currentWindow().minimize();
 
 /** 关闭窗口；`close_to_tray` 开启时后端会拦截为隐藏。 */
 export const closeWindow = () => currentWindow().close();
@@ -45,6 +49,22 @@ export async function pickOpenPath(
 ): Promise<string | null> {
   const picked = await openDialog({ title: "选择要导入的文件", filters });
   return typeof picked === "string" ? picked : null;
+}
+
+export async function pickCliPath(): Promise<string | null> {
+  const picked = await openDialog({
+    title: "选择 CLI 可执行文件",
+    filters: [{ name: "CLI", extensions: ["exe", "cmd", "bat"] }],
+  });
+  return typeof picked === "string" ? picked : null;
+}
+
+const SETTINGS_CHANGED_EVENT = "settings-changed";
+
+export const notifySettingsChanged = () => emit(SETTINGS_CHANGED_EVENT);
+
+export function onSettingsChanged(handler: () => void): Promise<UnlistenFn> {
+  return listen(SETTINGS_CHANGED_EVENT, handler);
 }
 
 /** 写入系统剪贴板。 */

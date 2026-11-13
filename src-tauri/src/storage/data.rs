@@ -1,5 +1,7 @@
 //! 内存中的数据集与其操作。
 
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::model::{display_name_of, normalize_path, now_ms, AppSettings, FolderRecord};
@@ -116,22 +118,34 @@ impl AppData {
     ) -> crate::commands::ImportSummary {
         let mut added_ids = Vec::new();
         let mut skipped = 0;
+        let mut known_paths: HashSet<String> = self
+            .folders
+            .iter()
+            .map(|record| normalize_path(&record.path).to_lowercase())
+            .collect();
+        let mut known_ids: HashSet<String> = self
+            .folders
+            .iter()
+            .map(|record| record.id.clone())
+            .collect();
 
         for mut record in incoming {
             let norm = normalize_path(&record.path);
-            if norm.is_empty() {
-                skipped += 1;
-                continue;
-            }
-            if self.find_by_path(&norm).is_some() {
+            if norm.is_empty() || !known_paths.insert(norm.to_lowercase()) {
                 skipped += 1;
                 continue;
             }
 
             record.path = norm;
             // 导入的记录可能来自旧版本，补全必要字段。
-            if record.id.trim().is_empty() {
-                record.id = uuid::Uuid::new_v4().to_string();
+            if record.id.trim().is_empty() || !known_ids.insert(record.id.clone()) {
+                loop {
+                    let id = uuid::Uuid::new_v4().to_string();
+                    if known_ids.insert(id.clone()) {
+                        record.id = id;
+                        break;
+                    }
+                }
             }
             if record.name.trim().is_empty() {
                 record.name = display_name_of(&record.path);
@@ -144,9 +158,14 @@ impl AppData {
         }
 
         self.trim_history();
+        let surviving_ids: HashSet<&str> = self
+            .folders
+            .iter()
+            .map(|record| record.id.as_str())
+            .collect();
         let added = added_ids
             .iter()
-            .filter(|id| self.folders.iter().any(|record| record.id == id.as_str()))
+            .filter(|id| surviving_ids.contains(id.as_str()))
             .count();
         crate::commands::ImportSummary {
             added,

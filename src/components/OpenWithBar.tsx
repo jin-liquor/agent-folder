@@ -15,6 +15,7 @@ import {
   VisualStudioCodeIcon,
 } from "./Icons";
 import type { CliAgentStatus } from "../lib/types";
+import type { Language } from "../lib/i18n";
 
 interface Props {
   onVscode: () => void;
@@ -27,14 +28,20 @@ interface Props {
   available?: CliAgentStatus | null;
   /** 选中行常显，其余行靠 hover 显示。 */
   active?: boolean;
+  language: Language;
 }
 
 const BASE =
   "flex h-6 w-6 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-30";
 
 /** 统一生成「未检测到」提示，避免六处文案不一致。 */
-function disabledTitle(available: CliAgentStatus | null | undefined, key: keyof CliAgentStatus) {
-  return available && !available[key] ? `未检测到 ${key} 命令` : null;
+function disabledTitle(
+  available: CliAgentStatus | null | undefined,
+  key: keyof CliAgentStatus,
+  english: boolean,
+) {
+  if (!available || available[key]) return null;
+  return english ? `${key} command not detected` : `未检测到 ${key} 命令`;
 }
 
 export default function OpenWithBar({
@@ -46,11 +53,14 @@ export default function OpenWithBar({
   onReveal,
   available,
   active = false,
+  language,
 }: Props) {
-  const codexOff = disabledTitle(available, "codex");
-  const claudeOff = disabledTitle(available, "claude");
-  const ompOff = disabledTitle(available, "omp");
-  const opencodeOff = disabledTitle(available, "opencode");
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
+  const codexOff = disabledTitle(available, "codex", english);
+  const claudeOff = disabledTitle(available, "claude", english);
+  const ompOff = disabledTitle(available, "omp", english);
+  const opencodeOff = disabledTitle(available, "opencode", english);
 
   return (
     <div
@@ -61,8 +71,8 @@ export default function OpenWithBar({
     >
       <button
         type="button"
-        title="用 Visual Studio Code 打开"
-        aria-label="用 Visual Studio Code 打开"
+        title={text("用 Visual Studio Code 打开", "Open with Visual Studio Code")}
+        aria-label={text("用 Visual Studio Code 打开", "Open with Visual Studio Code")}
         onClick={onVscode}
         className={`${BASE} text-[#007ACC] hover:bg-[color-mix(in_srgb,#007ACC_12%,transparent)]`}
       >
@@ -70,8 +80,8 @@ export default function OpenWithBar({
       </button>
       <button
         type="button"
-        title={codexOff ?? "在此目录启动 Codex"}
-        aria-label="在此目录启动 Codex"
+        title={codexOff ?? text("在此目录启动 Codex", "Launch Codex here")}
+        aria-label={text("在此目录启动 Codex", "Launch Codex here")}
         onClick={onCodex}
         disabled={available ? !available.codex : false}
         className={`${BASE} text-[#10A37F] hover:bg-[color-mix(in_srgb,#10A37F_12%,transparent)]`}
@@ -80,8 +90,8 @@ export default function OpenWithBar({
       </button>
       <button
         type="button"
-        title={claudeOff ?? "在此目录启动 Claude Code"}
-        aria-label="在此目录启动 Claude Code"
+        title={claudeOff ?? text("在此目录启动 Claude Code", "Launch Claude Code here")}
+        aria-label={text("在此目录启动 Claude Code", "Launch Claude Code here")}
         onClick={onClaude}
         disabled={available ? !available.claude : false}
         className={`${BASE} text-[#D97757] hover:bg-[color-mix(in_srgb,#D97757_12%,transparent)]`}
@@ -90,8 +100,8 @@ export default function OpenWithBar({
       </button>
       <button
         type="button"
-        title={ompOff ?? "在此目录启动 omp"}
-        aria-label="在此目录启动 omp"
+        title={ompOff ?? text("在此目录启动 omp", "Launch omp here")}
+        aria-label={text("在此目录启动 omp", "Launch omp here")}
         onClick={onOmp}
         disabled={available ? !available.omp : false}
         className={`${BASE} text-[#9b4dff] hover:bg-[color-mix(in_srgb,#9b4dff_12%,transparent)]`}
@@ -100,8 +110,8 @@ export default function OpenWithBar({
       </button>
       <button
         type="button"
-        title={opencodeOff ?? "在此目录启动 opencode"}
-        aria-label="在此目录启动 opencode"
+        title={opencodeOff ?? text("在此目录启动 opencode", "Launch opencode here")}
+        aria-label={text("在此目录启动 opencode", "Launch opencode here")}
         onClick={onOpencode}
         disabled={available ? !available.opencode : false}
         className={`${BASE} text-[var(--text-primary)] hover:bg-[var(--hover-subtle)]`}
@@ -111,8 +121,8 @@ export default function OpenWithBar({
       {onReveal && (
         <button
           type="button"
-          title="在资源管理器中显示"
-          aria-label="在资源管理器中显示"
+          title={text("在资源管理器中显示", "Show in File Explorer")}
+          aria-label={text("在资源管理器中显示", "Show in File Explorer")}
           onClick={onReveal}
           className={`${BASE} text-[var(--text-secondary)] hover:bg-[var(--hover-subtle)] hover:text-[var(--text-primary)]`}
         >

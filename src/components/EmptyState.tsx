@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
+import type { Language } from "../lib/i18n";
 import { FolderIcon, PlusIcon } from "./Icons";
 
-export default function EmptyState({ onAdd }: { onAdd: () => void }) {
+export default function EmptyState({ onAdd, language }: { onAdd: () => void; language: Language }) {
+  const english = language === "en-US";
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.96 }}
@@ -13,10 +15,12 @@ export default function EmptyState({ onAdd }: { onAdd: () => void }) {
       </div>
       <div className="text-center">
         <div className="text-[15px] font-semibold text-[var(--text-primary)]">
-          添加你的第一个文件夹
+          {english ? "Add your first folder" : "添加你的第一个文件夹"}
         </div>
         <div className="mt-1 text-[12px] text-[var(--text-secondary)]">
-          之后就能一键在编辑器中打开它
+          {english
+            ? "Open it in your editor with one click"
+            : "之后就能一键在编辑器中打开它"}
         </div>
       </div>
       <button
@@ -24,7 +28,7 @@ export default function EmptyState({ onAdd }: { onAdd: () => void }) {
         className="gh-btn-primary flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition"
       >
         <PlusIcon size={14} />
-        添加文件夹
+        {english ? "Add folder" : "添加文件夹"}
       </button>
     </motion.div>
   );

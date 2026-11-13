@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import * as system from "./lib/system";
 import { openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
 import { errorText } from "./lib/errors";
+import { t as translate } from "./lib/i18n";
 import { queryTokens } from "./lib/search";
 import { useAppStore, applyTheme } from "./stores/useAppStore";
 import type { CliAgentId, FolderRecord } from "./lib/types";
@@ -61,6 +62,10 @@ export default function App() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
+  const text = useCallback(
+    (zh: string, en: string) => (settings.language === "en-US" ? en : zh),
+    [settings.language],
+  );
 
   const { hits: diskHits, searching: diskSearching } = useDiskIndex(query, scanMode, 40);
   const { rows, searching } = useFolderList({
@@ -83,6 +88,21 @@ export default function App() {
         setLoadError(error instanceof Error ? error.message : String(error));
       });
   }, [load, scanMissing]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void system
+      .onSettingsChanged(() => void useAppStore.getState().reloadSettings())
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   /**
    * 窗口重新获得焦点时刷新数据。
@@ -113,30 +133,37 @@ export default function App() {
     async (record: FolderRecord) => {
       try {
         const result = await openPath(record.path);
-        if (!result.command) throw new Error("编辑器没有返回启动结果");
+        if (!result.command) throw new Error(text("编辑器没有返回启动结果", "The editor did not return a launch result"));
         toast.show(
           result.historySaved
-            ? `已打开「${record.name}」`
-            : `已打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+            ? text(`已打开「${record.name}」`, `Opened “${record.name}”`)
+            : text(
+                `已打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+                `Opened “${record.name}”, but history was not saved: ${result.historyError ?? "Please try again"}`,
+              ),
         );
         if (settings.hideAfterOpen) void system.hideWindow();
         setQuery("");
       } catch (error: unknown) {
-        toast.show(`打开失败：${errorText(error)}`);
+        toast.show(text(`打开失败：${errorText(error)}`, `Open failed: ${errorText(error)}`));
       }
     },
-    [openPath, settings.hideAfterOpen, toast],
+    [openPath, settings.hideAfterOpen, text, toast],
   );
 
   const openInVSCode = useCallback(
     async (record: FolderRecord) => {
       try {
         const result = await openInEditor(record.path, "vscode");
-        if (!result.command) throw new Error("Visual Studio Code 没有返回启动结果");
+        if (!result.command) throw new Error(text("Visual Studio Code 没有返回启动结果", "Visual Studio Code did not return a launch result"));
+        if (result.historySaved) useAppStore.getState().syncFolder(result.record);
         toast.show(
           result.historySaved
-            ? `已在 Visual Studio Code 中打开「${record.name}」`
-            : `已在 Visual Studio Code 中打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+            ? text(`已在 Visual Studio Code 中打开「${record.name}」`, `Opened “${record.name}” in Visual Studio Code`)
+            : text(
+                `已在 Visual Studio Code 中打开「${record.name}」，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+                `Opened “${record.name}” in Visual Studio Code, but history was not saved: ${result.historyError ?? "Please try again"}`,
+              ),
         );
         if (settings.hideAfterOpen) void system.hideWindow();
         setQuery("");
@@ -144,7 +171,7 @@ export default function App() {
         toast.show(`VS Code 打开失败：${errorText(error)}`);
       }
     },
-    [settings.hideAfterOpen, toast],
+    [settings.hideAfterOpen, text, toast],
   );
 
   const openScanPath = useCallback(
@@ -153,56 +180,59 @@ export default function App() {
         const result = await openPath(path);
         toast.show(
           result.historySaved
-            ? `已打开 ${path}`
-            : `已打开 ${path}，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+            ? text(`已打开 ${path}`, `Opened ${path}`)
+            : text(
+                `已打开 ${path}，但历史记录未保存：${result.historyError ?? "请稍后重试"}`,
+                `Opened ${path}, but history was not saved: ${result.historyError ?? "Please try again"}`,
+              ),
         );
         if (settings.hideAfterOpen) void system.hideWindow();
         setQuery("");
       } catch (error: unknown) {
-        toast.show(`打开失败：${errorText(error)}`);
+        toast.show(text(`打开失败：${errorText(error)}`, `Open failed: ${errorText(error)}`));
       }
     },
-    [openPath, settings.hideAfterOpen, toast],
+    [openPath, settings.hideAfterOpen, text, toast],
   );
 
   const launchAgent = useCallback(
     async (path: string, agent: CliAgentId, name: string) => {
       try {
         const command = await openCliAgent(path, agent);
-        toast.show(`${name} 已启动：${command}`);
+        toast.show(text(`${name} 已启动：${command}`, `${name} started: ${command}`));
         setQuery("");
         if (settings.hideAfterOpen) void system.hideWindow();
       } catch (error: unknown) {
         // 失败时不能顺手隐藏窗口，否则提示跟着窗口一起消失，
         // 用户看到的就是「点了没反应」。
-        toast.show(`启动${name}失败：${errorText(error)}`);
+        toast.show(text(`启动${name}失败：${errorText(error)}`, `Failed to launch ${name}: ${errorText(error)}`));
       }
     },
-    [settings.hideAfterOpen, toast],
+    [settings.hideAfterOpen, text, toast],
   );
 
   const handleRemove = useCallback(
     async (record: FolderRecord) => {
       try {
         await removeFolder(record.id);
-        toast.show(`已移除「${record.name}」`);
+        toast.show(text(`已移除「${record.name}」`, `Removed “${record.name}”`));
       } catch (error: unknown) {
-        toast.show(`移除失败：${errorText(error)}`);
+        toast.show(text(`移除失败：${errorText(error)}`, `Remove failed: ${errorText(error)}`));
       }
     },
-    [removeFolder, toast],
+    [removeFolder, text, toast],
   );
 
   const changeFavorite = useCallback(
     async (record: FolderRecord) => {
       try {
         await toggleFavorite(record.id);
-        toast.show(record.favorite ? "已取消收藏" : "已收藏");
+        toast.show(text(record.favorite ? "已取消收藏" : "已收藏", record.favorite ? "Removed from favorites" : "Added to favorites"));
       } catch (error: unknown) {
-        toast.show(`收藏状态更新失败：${errorText(error)}`);
+        toast.show(text(`收藏状态更新失败：${errorText(error)}`, `Favorite update failed: ${errorText(error)}`));
       }
     },
-    [toggleFavorite, toast],
+    [toggleFavorite, text, toast],
   );
 
   /** 添加指定路径（目录树选中或对话框返回）。 */
@@ -210,12 +240,12 @@ export default function App() {
     async (path: string) => {
       try {
         const record = await addFolder(path);
-        if (record) toast.show(`已添加「${record.name}」`);
+        if (record) toast.show(text(`已添加「${record.name}」`, `Added “${record.name}”`));
       } catch (error: unknown) {
-        toast.show(`添加失败：${errorText(error)}`);
+        toast.show(text(`添加失败：${errorText(error)}`, `Add failed: ${errorText(error)}`));
       }
     },
-    [addFolder, toast],
+    [addFolder, text, toast],
   );
 
   /** 通过系统对话框添加；取消则什么都不做。 */
@@ -223,11 +253,11 @@ export default function App() {
     try {
       const record = await addFolder();
       if (record) {
-        toast.show(`已添加「${record.name}」`);
+        toast.show(text(`已添加「${record.name}」`, `Added “${record.name}”`));
         setAddOpen(false);
       }
     } catch (error: unknown) {
-      toast.show(`添加失败：${errorText(error)}`);
+      toast.show(text(`添加失败：${errorText(error)}`, `Add failed: ${errorText(error)}`));
     }
   }, [addFolder, toast]);
 
@@ -235,12 +265,12 @@ export default function App() {
     async (record: FolderRecord, name: string) => {
       try {
         await renameFolder(record.id, name);
-        toast.show(`已重命名为「${name}」`);
+        toast.show(text(`已重命名为「${name}」`, `Renamed to “${name}”`));
       } catch (error: unknown) {
-        toast.show(`重命名失败：${errorText(error)}`);
+        toast.show(text(`重命名失败：${errorText(error)}`, `Rename failed: ${errorText(error)}`));
       }
     },
-    [renameFolder, toast],
+    [renameFolder, text, toast],
   );
 
   const handleColor = useCallback(
@@ -248,22 +278,26 @@ export default function App() {
       try {
         await setFolderColor(record.id, color);
       } catch (error: unknown) {
-        toast.show(`标记颜色失败：${errorText(error)}`);
+        toast.show(text(`标记颜色失败：${errorText(error)}`, `Color update failed: ${errorText(error)}`));
       }
     },
-    [setFolderColor, toast],
+    [setFolderColor, text, toast],
   );
 
   const handleTags = useCallback(
     async (record: FolderRecord, tags: string[]) => {
       try {
         await setFolderTags(record.id, tags);
-        toast.show(tags.length > 0 ? `已更新标签（${tags.length} 个）` : "已清除标签");
+        toast.show(
+          tags.length > 0
+            ? text(`已更新标签（${tags.length} 个）`, `Updated ${tags.length} tags`)
+            : text("已清除标签", "Cleared tags"),
+        );
       } catch (error: unknown) {
-        toast.show(`更新标签失败：${errorText(error)}`);
+        toast.show(text(`更新标签失败：${errorText(error)}`, `Tag update failed: ${errorText(error)}`));
       }
     },
-    [setFolderTags, toast],
+    [setFolderTags, text, toast],
   );
 
   const highlight = useCallback(
@@ -311,8 +345,13 @@ export default function App() {
     isSearchFocused: () => document.activeElement === inputRef.current,
   });
 
-  const favoriteRows = rows.filter((r) => r.kind === "record" && r.record.favorite);
-  const normalRows = rows.filter((r) => !(r.kind === "record" && r.record.favorite));
+  const indexedRows = rows.map((row, index) => ({ row, index }));
+  const favoriteRows = indexedRows.filter(
+    ({ row }) => row.kind === "record" && row.record.favorite,
+  );
+  const normalRows = indexedRows.filter(
+    ({ row }) => !(row.kind === "record" && row.record.favorite),
+  );
   const searchRoots = settings.searchRoots ?? [];
 
   const renderRow = (row: Row, index: number) => {
@@ -321,6 +360,7 @@ export default function App() {
         <FolderItem
           key={row.record.id}
           record={row.record}
+          language={settings.language}
           selected={index === selected}
           missing={missing.has(row.record.id)}
           highlight={highlight}
@@ -333,14 +373,14 @@ export default function App() {
           onFavorite={() => void changeFavorite(row.record)}
           onReveal={() =>
             void revealInExplorer(row.record.path)
-              .then(() => toast.show("已在资源管理器中显示"))
-              .catch((error: unknown) => toast.show(`定位失败：${errorText(error)}`))
+              .then(() => toast.show(text("已在资源管理器中显示", "Shown in File Explorer")))
+              .catch((error: unknown) => toast.show(text(`定位失败：${errorText(error)}`, `Reveal failed: ${errorText(error)}`)))
           }
           onCopy={() =>
             void system
               .copyText(row.record.path)
-              .then(() => toast.show("已复制路径"))
-              .catch((error: unknown) => toast.show(`复制失败：${errorText(error)}`))
+              .then(() => toast.show(text("已复制路径", "Path copied")))
+              .catch((error: unknown) => toast.show(text(`复制失败：${errorText(error)}`, `Copy failed: ${errorText(error)}`)))
           }
           onRemove={() => void handleRemove(row.record)}
           onRename={(name) => void handleRename(row.record, name)}
@@ -367,7 +407,7 @@ export default function App() {
     if (loadError) {
       return (
         <div className="window-glass flex h-full flex-col items-center justify-center gap-3 rounded-xl px-8 text-center">
-          <div className="text-[13px] font-medium text-[var(--text-primary)]">数据加载失败</div>
+          <div className="text-[13px] font-medium text-[var(--text-primary)]">{translate(settings.language, "loadFailed")}</div>
           <div className="max-w-[520px] break-words text-[11px] text-[var(--text-secondary)]">
             {loadError}
           </div>
@@ -378,7 +418,7 @@ export default function App() {
             }}
             className="rounded-lg border border-[var(--glass-border)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
-            重试
+            {translate(settings.language, "retry")}
           </button>
         </div>
       );
@@ -393,13 +433,14 @@ export default function App() {
   return (
     <div className="window-glass relative flex h-full flex-col overflow-hidden rounded-xl">
       <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
-      <StorageNotice status={storageStatus} onChanged={refreshStorage} />
+      <StorageNotice status={storageStatus} onChanged={refreshStorage} language={settings.language} />
 
       <SearchBar
         ref={inputRef}
         value={query}
         onChange={setQuery}
         scanning={diskSearching}
+        language={settings.language}
       />
 
       <div className="flex-1 overflow-y-auto pb-2">
@@ -407,31 +448,35 @@ export default function App() {
           searching ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 pt-16 text-center">
               <div className="text-[13px] text-[var(--text-secondary)]">
-                没有找到匹配「{query}」的文件夹
+                {settings.language === "en-US"
+                  ? `No folders match “${query}”`
+                  : `没有找到匹配「${query}」的文件夹`}
               </div>
               {scanMode && searchRoots.length === 0 && (
                 <button
                   onClick={() => setSettingsOpen(true)}
                   className="text-[11px] text-[var(--accent)] opacity-80 transition hover:opacity-100"
                 >
-                  磁盘扫描需要先设置扫描范围 → 去设置
+                  {text("磁盘扫描需要先设置扫描范围 → 去设置", "Set scan roots in Settings before searching the disk → Open settings")}
                 </button>
               )}
               {scanMode && searchRoots.length > 0 && (
                 <div className="text-[11px] text-[var(--text-secondary)] opacity-70">
-                  已在 {searchRoots.length} 个目录下扫描完成
+                  {settings.language === "en-US"
+                    ? `Scanned ${searchRoots.length} directories`
+                    : `已在 ${searchRoots.length} 个目录下扫描完成`}
                 </div>
               )}
             </div>
           ) : (
-            <EmptyState onAdd={() => setAddOpen(true)} />
+            <EmptyState onAdd={() => setAddOpen(true)} language={settings.language} />
           )
         ) : (
           <AnimatePresence initial={false}>
             {!searching && favoriteRows.length > 0 && (
               <motion.div key="fav" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
-                <SectionTitle text="⭐ 收藏" extra={`${favoriteRows.length} 个`} />
-                {favoriteRows.map((row) => renderRow(row, rows.indexOf(row)))}
+                <SectionTitle text={`⭐ ${translate(settings.language, "favorites")}`} extra={`${favoriteRows.length}`} />
+                {favoriteRows.map(({ row, index }) => renderRow(row, index))}
               </motion.div>
             )}
             {!searching && normalRows.length > 0 && (
@@ -440,13 +485,13 @@ export default function App() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                <SectionTitle text="🕘 最近使用" extra={`${normalRows.length} 个`} />
-                {normalRows.map((row) => renderRow(row, rows.indexOf(row)))}
+                <SectionTitle text={`🕘 ${translate(settings.language, "recent")}`} extra={`${normalRows.length}`} />
+                {normalRows.map(({ row, index }) => renderRow(row, index))}
               </motion.div>
             )}
             {searching && (
               <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <SectionTitle text="搜索结果" extra={`${rows.length} 个`} />
+                <SectionTitle text={translate(settings.language, "searchResults")} extra={`${rows.length}`} />
                 {rows.map((row, i) => renderRow(row, i))}
               </motion.div>
             )}
@@ -460,26 +505,26 @@ export default function App() {
           className="flex items-center gap-1.5 rounded-md border border-[var(--glass-border)] bg-[var(--canvas-default)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
           <PlusIcon size={13} />
-          添加文件夹
+          {translate(settings.language, "addFolder")}
         </button>
 
         <div className="flex items-center gap-3 text-[11px] text-[var(--text-secondary)]">
           {missing.size > 0 && (
             <button
-              aria-label={`清理 ${missing.size} 条失效记录`}
-              title={`清理 ${missing.size} 条失效记录`}
+              aria-label={text(`清理 ${missing.size} 条失效记录`, `Remove ${missing.size} missing records`)}
+              title={text(`清理 ${missing.size} 条失效记录`, `Remove ${missing.size} missing records`)}
               onClick={() => {
                 void purgeMissing()
-                  .then((n) => toast.show(`已清理 ${n} 条失效记录`))
-                  .catch((error: unknown) => toast.show(`清理失败：${errorText(error)}`));
+                  .then((n) => toast.show(text(`已清理 ${n} 条失效记录`, `Removed ${n} missing records`)))
+                  .catch((error: unknown) => toast.show(text(`清理失败：${errorText(error)}`, `Cleanup failed: ${errorText(error)}`)));
               }}
               className="flex items-center gap-1 rounded-md border border-[var(--danger)]/40 px-2 py-1 text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
             >
-              清理 {missing.size} 条失效记录
+              {text(`清理 ${missing.size} 条失效记录`, `Remove ${missing.size} missing records`)}
             </button>
           )}
-          <span>{searching ? `${rows.length} 个结果` : `${folders.length} 个文件夹`}</span>
-          <span className="kbd">Ctrl K 搜索</span>
+          <span>{searching ? text(`${rows.length} 个结果`, `${rows.length} results`) : text(`${folders.length} 个文件夹`, `${folders.length} folders`)}</span>
+          <span className="kbd">Ctrl K {text("搜索", "Search")}</span>
         </div>
       </div>
 
@@ -487,13 +532,14 @@ export default function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onImported={() => {
-          void load().catch((error: unknown) => toast.show(`刷新失败：${errorText(error)}`));
+          void load().catch((error: unknown) => toast.show(text(`刷新失败：${errorText(error)}`, `Refresh failed: ${errorText(error)}`)));
         }}
         onToast={toast.show}
       />
 
       <AddFolderDialog
         open={addOpen}
+        language={settings.language}
         onClose={() => setAddOpen(false)}
         onPickPath={(path) => {
           setAddOpen(false);

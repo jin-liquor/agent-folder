@@ -7,11 +7,13 @@
 import { useCallback, useEffect, useState } from "react";
 import * as commands from "../lib/commands";
 import { errorText } from "../lib/errors";
+import type { Language } from "../lib/i18n";
 import { ChevronIcon, FolderIcon } from "./Icons";
 
 interface Props {
   /** 选中某个目录时回调，用于添加记录。 */
   onPick: (path: string) => void;
+  language: Language;
 }
 
 /** 单个节点的展开状态与子项。 */
@@ -21,7 +23,9 @@ interface NodeState {
   children: commands.DirEntry[] | null;
 }
 
-export default function DirectoryTree({ onPick }: Props) {
+export default function DirectoryTree({ onPick, language }: Props) {
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
   const [drives, setDrives] = useState<commands.DirEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [nodes, setNodes] = useState<Record<string, NodeState>>({});
@@ -83,8 +87,8 @@ export default function DirectoryTree({ onPick }: Props) {
           >
             <button
               type="button"
-              aria-label={isOpen ? `收起 ${entry.name}` : `展开 ${entry.name}`}
-              title={isOpen ? "收起" : "展开"}
+              aria-label={isOpen ? `${text("收起", "Collapse")} ${entry.name}` : `${text("展开", "Expand")} ${entry.name}`}
+              title={isOpen ? text("收起", "Collapse") : text("展开", "Expand")}
               disabled={!entry.hasChildren}
               onClick={() => void toggle(entry)}
               className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-secondary)] transition ${
@@ -98,7 +102,7 @@ export default function DirectoryTree({ onPick }: Props) {
 
             <button
               type="button"
-              aria-label={`选择 ${entry.name}`}
+              aria-label={`${text("选择", "Select")} ${entry.name}`}
               title={entry.path}
               onClick={() => onPick(entry.path)}
               className="min-w-0 flex-1 truncate text-left text-[12px] text-[var(--text-primary)] hover:text-[var(--accent)]"
@@ -112,7 +116,7 @@ export default function DirectoryTree({ onPick }: Props) {
               className="py-1 text-[11px] text-[var(--text-secondary)] opacity-70"
               style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }}
             >
-              加载中…
+              {text("加载中…", "Loading…")}
             </div>
           )}
           {isOpen && state?.error && (
@@ -129,7 +133,7 @@ export default function DirectoryTree({ onPick }: Props) {
               className="py-1 text-[11px] text-[var(--text-secondary)] opacity-60"
               style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }}
             >
-              没有子目录
+              {text("没有子目录", "No subdirectories")}
             </div>
           )}
           {isOpen && state?.children && renderLevel(state.children, depth + 1)}
@@ -147,7 +151,7 @@ export default function DirectoryTree({ onPick }: Props) {
 
   if (drives.length === 0) {
     return (
-      <div className="px-2 py-3 text-[11px] text-[var(--text-secondary)] opacity-70">加载磁盘…</div>
+      <div className="px-2 py-3 text-[11px] text-[var(--text-secondary)] opacity-70">{text("加载磁盘…", "Loading disks…")}</div>
     );
   }
 

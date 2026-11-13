@@ -10,6 +10,7 @@
  * - 完整键盘可达：`↑`/`↓` 移动，`Enter` 触发。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { Language } from "../lib/i18n";
 
 /** 菜单里的一项。 */
 export interface MenuItem {
@@ -35,6 +36,7 @@ interface Props {
   x: number;
   y: number;
   entries: MenuEntry[];
+  language: Language;
   onSelect: (id: string) => void;
   onClose: () => void;
 }
@@ -65,7 +67,7 @@ export function placeMenu(
   return { left, top };
 }
 
-export default function ContextMenu({ x, y, entries, onSelect, onClose }: Props) {
+export default function ContextMenu({ x, y, entries, language, onSelect, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(() =>
     placeMenu(x, y, window.innerWidth, window.innerHeight),
@@ -138,7 +140,7 @@ export default function ContextMenu({ x, y, entries, onSelect, onClose }: Props)
     <div
       ref={ref}
       role="menu"
-      aria-label="文件夹操作"
+      aria-label={language === "en-US" ? "Folder actions" : "文件夹操作"}
       style={{ left: position.left, top: position.top, width: MENU_WIDTH }}
       className="fixed z-50 overflow-hidden rounded-md border border-[var(--glass-border)] bg-[var(--glass-solid)] py-1 shadow-xl"
       // 菜单渲染在列表行内部，而行的容器有 onClick=打开。

@@ -6,6 +6,7 @@
  * 例如 `Ctrl+Alt+V`、`Ctrl+Shift+Space`。
  */
 import { useEffect, useRef, useState } from "react";
+import type { Language } from "../lib/i18n";
 
 interface Props {
   value: string;
@@ -19,6 +20,7 @@ interface Props {
    * 快速启动快捷键允许为空，用户可能就想把它关掉。
    */
   allowEmpty?: boolean;
+  language: Language;
 }
 
 /** 可识别的修饰键。 */
@@ -74,7 +76,9 @@ export function formatHotkey(event: KeyboardEvent): string | null {
   return parts.join("+");
 }
 
-export default function HotkeyInput({ value, onChange, error, allowEmpty = false }: Props) {
+export default function HotkeyInput({ value, onChange, error, allowEmpty = false, language }: Props) {
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -94,7 +98,7 @@ export default function HotkeyInput({ value, onChange, error, allowEmpty = false
 
       const formatted = formatHotkey(event);
       if (!formatted) {
-        setHint("需要至少一个修饰键（Ctrl / Alt / Shift / Win）");
+        setHint(text("需要至少一个修饰键（Ctrl / Alt / Shift / Win）", "Use at least one modifier (Ctrl / Alt / Shift / Win)"));
         return;
       }
       setRecording(false);
@@ -105,14 +109,14 @@ export default function HotkeyInput({ value, onChange, error, allowEmpty = false
     // 捕获阶段拦截，避免触发全局键盘导航。
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [recording, onChange]);
+  }, [recording, onChange, language]);
 
   return (
     <div className="flex w-[180px] max-w-full flex-col items-stretch gap-1">
       <button
         ref={buttonRef}
         type="button"
-        aria-label="录制全局快捷键"
+        aria-label={text("录制全局快捷键", "Record global shortcut")}
         onClick={() => {
           setRecording((on) => !on);
           setHint(null);
@@ -124,9 +128,9 @@ export default function HotkeyInput({ value, onChange, error, allowEmpty = false
         }`}
       >
         {recording ? (
-          <span className="text-[11px] text-[var(--accent)]">请按下组合键…</span>
+          <span className="text-[11px] text-[var(--accent)]">{text("请按下组合键…", "Press a key combination…")}</span>
         ) : value.trim() === "" ? (
-          <span className="text-[11px] text-[var(--text-secondary)]">未设置</span>
+          <span className="text-[11px] text-[var(--text-secondary)]">{text("未设置", "Not set")}</span>
         ) : (
           value.split("+").map((key) => (
             <span key={key} className="kbd">
@@ -147,7 +151,7 @@ export default function HotkeyInput({ value, onChange, error, allowEmpty = false
           disabled={value.trim() === ""}
           className="self-end text-[10px] text-[var(--text-secondary)] transition hover:text-[var(--danger)] disabled:opacity-40 disabled:hover:text-[var(--text-secondary)]"
         >
-          清空（禁用）
+          {text("清空（禁用）", "Clear (disable)")}
         </button>
       )}
 

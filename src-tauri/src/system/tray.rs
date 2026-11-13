@@ -26,20 +26,32 @@ const OPEN_PREFIX: &str = "open::";
 fn build_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
 
-    let show = MenuItem::with_id(app, "show", "打开主界面", true, None::<&str>)
+    let (language, recent) = {
+        let store = app.state::<Store>();
+        let data = store.data();
+        (data.settings.language.clone(), data.recent(RECENT_LIMIT))
+    };
+    let english = language == "en-US";
+    let show_label = if english {
+        "Show window"
+    } else {
+        "打开主界面"
+    };
+    let empty_label = if english {
+        "(No recent folders)"
+    } else {
+        "（暂无最近文件夹）"
+    };
+    let quit_label = if english { "Quit" } else { "退出" };
+
+    let show = MenuItem::with_id(app, "show", show_label, true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&show).map_err(|e| e.to_string())?;
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
-    let recent = {
-        let store = app.state::<Store>();
-        let data = store.data();
-        data.recent(RECENT_LIMIT)
-    };
-
     if recent.is_empty() {
-        let placeholder = MenuItem::with_id(app, "noop", "（暂无最近文件夹）", false, None::<&str>)
+        let placeholder = MenuItem::with_id(app, "noop", empty_label, false, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&placeholder).map_err(|e| e.to_string())?;
     } else {
@@ -58,8 +70,8 @@ fn build_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    let quit =
-        MenuItem::with_id(app, "quit", "退出", true, None::<&str>).map_err(|e| e.to_string())?;
+    let quit = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)
+        .map_err(|e| e.to_string())?;
     menu.append(&quit).map_err(|e| e.to_string())?;
 
     Ok(menu)

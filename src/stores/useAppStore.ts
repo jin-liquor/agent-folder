@@ -6,6 +6,7 @@
  */
 import { create } from "zustand";
 import * as commands from "../lib/commands";
+import { normalizeLanguage } from "../lib/i18n";
 import * as system from "../lib/system";
 import {
   BUILTIN_PRESETS,
@@ -18,6 +19,7 @@ import {
   type CliAgentId,
   type CliAgentStatus,
   type CliPreset,
+  type CliPaths,
   type EditorInfo,
   type FolderRecord,
   type StorageStatus,
@@ -59,6 +61,7 @@ export function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
 
   return {
     ...merged,
+    language: normalizeLanguage(merged.language),
     // 旧默认值一次性升级；用户改过的组合与主动禁用保持原样。
     quickHotkey: LEGACY_QUICK_HOTKEYS.includes(merged.quickHotkey)
       ? DEFAULT_QUICK_HOTKEY
@@ -107,6 +110,8 @@ interface AppState {
   setFolderTags: (id: string, tags: string[]) => Promise<FolderRecord>;
   openPath: (path: string) => Promise<commands.OpenResult>;
   saveSettings: (patch: Partial<AppSettings>) => Promise<void>;
+  reloadSettings: () => Promise<void>;
+  setCliPath: (agent: CliAgentId, path: string | null) => Promise<CliPaths>;
   syncFolder: (record: FolderRecord) => void;
 }
 
@@ -155,6 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       settings: { ...get().settings, cliPaths: paths },
       cliStatus: status,
     });
+    void system.notifySettingsChanged().catch(() => {});
     return status;
   },
 
@@ -212,10 +218,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           await system.setAutostart(patch.launchOnStartup);
         }
         const saved = await commands.saveSettings(next);
-        set({ settings: saved });
+        set({ settings: normalizeSettings(saved) });
         applyTheme(saved.theme);
+        void system.notifySettingsChanged().catch(() => {});
       } catch (error) {
-        // 自启动开关由系统管理，保存失败时要把它一起还原。
         if (patch.launchOnStartup !== undefined) {
           await system.setAutostart(previous.launchOnStartup).catch(() => {});
         }
@@ -228,6 +234,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       () => {},
     );
     return operation;
+  },
+
+  setCliPath: (agent, path) => {
+    const operation = settingsWrite.catch(() => {}).then(async () => {
+      const cliPaths = await commands.setCliPath(agent, path);
+      const cliStatus = await commands.detectCliAgents();
+      set({ settings: { ...get().settings, cliPaths }, cliStatus });
+      void system.notifySettingsChanged().catch(() => {});
+      return cliPaths;
+    });
+    settingsWrite = operation.then(() => {}, () => {});
+    return operation;
+  },
+
+  reloadSettings: async () => {
+    const settings = normalizeSettings(await commands.getSettings());
+    set({ settings });
+    applyTheme(settings.theme);
   },
 
   /** 把更新后的记录提到列表最前，保持「最近打开」语义。 */

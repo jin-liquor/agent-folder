@@ -68,59 +68,96 @@ pub fn refresh_cli_paths(
     Ok((paths, status))
 }
 
+#[tauri::command]
+pub fn set_cli_path(
+    state: State<Store>,
+    agent: String,
+    path: Option<String>,
+) -> Result<CliPaths, String> {
+    let agent =
+        cli_probe::CliAgent::parse(&agent).ok_or_else(|| format!("不支持的 CLI 工具: {agent}"))?;
+    let path = path.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    });
+
+    if let Some(path) = path.as_deref() {
+        let extension = std::path::Path::new(path)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !["exe", "cmd", "bat"].contains(&extension.as_str()) {
+            return Err("路径必须指向 .exe、.cmd 或 .bat 文件".into());
+        }
+        if !std::path::Path::new(path).is_file() {
+            return Err("指定的 CLI 文件不存在".into());
+        }
+    }
+
+    let mut data = state.data();
+    let rollback = data.settings.cli_paths.clone();
+    data.settings.cli_paths.set_manual(agent, path);
+    let paths = data.settings.cli_paths.clone();
+    if let Err(error) = state.save_locked(&data) {
+        data.settings.cli_paths = rollback;
+        return Err(error);
+    }
+    Ok(paths)
+}
+
 /// 探测全部 CLI 并写回设置，返回新缓存与可用性状态。
 ///
 /// 探测会 fork `where.exe` 等子进程，属于耗时操作，因此放在锁外先算好，
 /// 再短暂持锁写入。
 pub fn probe_and_store(state: &Store) -> Result<(CliPaths, editor::CliAgentStatus), String> {
-    let overrides: Vec<(cli_probe::CliAgent, Option<String>)> = {
-        let data = state.data();
-        cli_probe::CliAgent::ALL
-            .iter()
-            .map(|agent| {
-                (
-                    *agent,
-                    Some(data.settings.cli_paths.get(*agent).to_string()),
-                )
-            })
-            .collect()
-    };
+    let automatic_paths: Vec<(cli_probe::CliAgent, Option<String>)> = cli_probe::CliAgent::ALL
+        .iter()
+        .map(|agent| (*agent, None))
+        .collect();
+    let resolved = cli_probe::resolve_all(&automatic_paths);
+    let available: Vec<(cli_probe::CliAgent, bool)> = resolved
+        .iter()
+        .map(|(agent, result)| (*agent, result.is_available()))
+        .collect();
+    let detected: Vec<(cli_probe::CliAgent, String)> = resolved
+        .iter()
+        .map(|(agent, result)| (*agent, result.path_text()))
+        .collect();
+    let probed_at = crate::model::now_ms() as u64;
 
-    let mut paths = CliPaths {
-        probed_at: crate::model::now_ms() as u64,
-        ..CliPaths::default()
-    };
-    let mut available = Vec::new();
-    for (agent, resolved) in cli_probe::resolve_all(&overrides) {
-        paths.set(agent, resolved.path_text());
-        available.push((agent, resolved.is_available()));
-    }
-
-    {
+    let stored_paths = {
         let mut data = state.data();
         let snapshot = data.settings.cli_paths.clone();
-        data.settings.cli_paths = paths.clone();
+        data.settings.cli_paths.probed_at = probed_at;
+        for (agent, value) in &detected {
+            data.settings.cli_paths.set(*agent, value.clone());
+        }
+        let stored = data.settings.cli_paths.clone();
         if let Err(error) = state.save_locked(&data) {
             data.settings.cli_paths = snapshot;
             return Err(error);
         }
-    }
-
-    let status = editor::CliAgentStatus {
-        codex: available
-            .iter()
-            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Codex && *ok),
-        claude: available
-            .iter()
-            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Claude && *ok),
-        omp: available
-            .iter()
-            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Omp && *ok),
-        opencode: available
-            .iter()
-            .any(|(agent, ok)| *agent == cli_probe::CliAgent::Opencode && *ok),
+        stored
     };
-    Ok((paths, status))
+
+    let is_available = |agent| {
+        stored_paths
+            .manual(agent)
+            .map(|path| std::path::Path::new(path).is_file())
+            .unwrap_or_else(|| {
+                available
+                    .iter()
+                    .any(|(candidate, ok)| *candidate == agent && *ok)
+            })
+    };
+    let status = editor::CliAgentStatus {
+        codex: is_available(cli_probe::CliAgent::Codex),
+        claude: is_available(cli_probe::CliAgent::Claude),
+        omp: is_available(cli_probe::CliAgent::Omp),
+        opencode: is_available(cli_probe::CliAgent::Opencode),
+    };
+    Ok((stored_paths, status))
 }
 
 /// 保存设置。

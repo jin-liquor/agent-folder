@@ -6,6 +6,7 @@
  * 统一收进右键菜单（`Shift+F10` 为键盘等价入口）。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { Language } from "../lib/i18n";
 import type { FolderRecord } from "../lib/types";
 import { shortenPath, timeAgo } from "../lib/path";
 import { projectStyle } from "../lib/project";
@@ -31,6 +32,7 @@ import {
 
 interface Props {
   record: FolderRecord;
+  language: Language;
   selected: boolean;
   /** 目录是否已不存在（改名或删除）。 */
   missing?: boolean;
@@ -56,6 +58,7 @@ interface Props {
 
 export default function FolderItem({
   record,
+  language,
   selected,
   missing = false,
   highlight,
@@ -75,6 +78,8 @@ export default function FolderItem({
   forceMenu = false,
   onMenuClosed,
 }: Props) {
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(record.name);
   const [colorOpen, setColorOpen] = useState(false);
@@ -111,19 +116,19 @@ export default function FolderItem({
 
   /** 右键菜单项：低频动作全部收在这里。 */
   const menuEntries: MenuEntry[] = [
-    { id: "reveal", label: "在资源管理器中显示", icon: <RevealIcon size={12} /> },
-    { id: "copy", label: "复制路径", icon: <CopyIcon size={12} /> },
+    { id: "reveal", label: text("在资源管理器中显示", "Show in File Explorer"), icon: <RevealIcon size={12} /> },
+    { id: "copy", label: text("复制路径", "Copy path"), icon: <CopyIcon size={12} /> },
     { sep: true },
     {
       id: "favorite",
-      label: record.favorite ? "取消收藏" : "收藏",
+      label: record.favorite ? text("取消收藏", "Remove from favorites") : text("收藏", "Add to favorites"),
       icon: <StarIcon size={12} filled={record.favorite} />,
     },
-    { id: "rename", label: "重命名", icon: <EditIcon size={12} /> },
-    { id: "color", label: "标记颜色", icon: <PaletteIcon size={12} /> },
-    { id: "tags", label: "编辑标签", icon: <TagIcon size={12} /> },
+    { id: "rename", label: text("重命名", "Rename"), icon: <EditIcon size={12} /> },
+    { id: "color", label: text("标记颜色", "Label color"), icon: <PaletteIcon size={12} /> },
+    { id: "tags", label: text("编辑标签", "Edit tags"), icon: <TagIcon size={12} /> },
     { sep: true },
-    { id: "remove", label: "移除记录", icon: <TrashIcon size={12} />, danger: true },
+    { id: "remove", label: text("移除记录", "Remove record"), icon: <TrashIcon size={12} />, danger: true },
   ];
 
   const handleMenuSelect = (id: string) => {
@@ -213,7 +218,7 @@ export default function FolderItem({
             <input
               ref={inputRef}
               value={draft}
-              aria-label="重命名文件夹"
+              aria-label={text("重命名文件夹", "Rename folder")}
               onChange={(event) => setDraft(event.target.value)}
               onClick={(event) => event.stopPropagation()}
               onBlur={commit}
@@ -235,7 +240,7 @@ export default function FolderItem({
                 event.stopPropagation();
                 beginEdit();
               }}
-              title="双击重命名"
+              title={text("双击重命名", "Double-click to rename")}
               className="truncate text-[13px] font-medium text-[var(--text-primary)]"
             >
               {highlight(record.name)}
@@ -258,10 +263,10 @@ export default function FolderItem({
           )}
           {missing && (
             <span
-              title="该目录已不存在，可能被改名或删除"
+              title={text("该目录已不存在，可能被改名或删除", "This directory no longer exists; it may have been renamed or deleted")}
               className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-1 py-px text-[9px] leading-[13px] font-medium text-red-500"
             >
-              路径失效
+              {text("路径失效", "Path unavailable")}
             </span>
           )}
         </div>
@@ -292,22 +297,22 @@ export default function FolderItem({
       </span>
 
       <div className="flex shrink-0 items-center gap-0.5">
-        <ActionButton title="使用 Visual Studio Code 打开" onClick={onOpenVisualStudioCode}>
+        <ActionButton title={text("使用 Visual Studio Code 打开", "Open with Visual Studio Code")} onClick={onOpenVisualStudioCode}>
           <VisualStudioCodeIcon size={14} />
         </ActionButton>
-        <ActionButton title="启动 Codex" onClick={onLaunchCodex}>
+        <ActionButton title={text("启动 Codex", "Launch Codex")} onClick={onLaunchCodex}>
           <CodexIcon size={14} />
         </ActionButton>
-        <ActionButton title="启动 Claude Code" onClick={onLaunchClaude}>
+        <ActionButton title={text("启动 Claude Code", "Launch Claude Code")} onClick={onLaunchClaude}>
           <ClaudeIcon size={14} />
         </ActionButton>
-        <ActionButton title="启动 omp" onClick={onLaunchOmp}>
+        <ActionButton title={text("启动 omp", "Launch omp")} onClick={onLaunchOmp}>
           <OmpIcon size={14} />
         </ActionButton>
-        <ActionButton title="启动 opencode" onClick={onLaunchOpencode}>
+        <ActionButton title={text("启动 opencode", "Launch opencode")} onClick={onLaunchOpencode}>
           <OpencodeIcon size={14} />
         </ActionButton>
-        <ActionButton title={record.favorite ? "取消收藏" : "收藏"} onClick={onFavorite}>
+        <ActionButton title={record.favorite ? text("取消收藏", "Remove from favorites") : text("收藏", "Add to favorites")} onClick={onFavorite}>
           <StarIcon size={14} filled={record.favorite} />
         </ActionButton>
       </div>
@@ -315,6 +320,7 @@ export default function FolderItem({
       {colorOpen && (
         <ColorPicker
           current={record.color}
+          language={language}
           onPick={onColor}
           onClose={() => setColorOpen(false)}
         />
@@ -323,6 +329,7 @@ export default function FolderItem({
       {tagsOpen && (
         <TagEditor
           tags={record.tags}
+          language={language}
           onSubmit={onTags}
           onClose={() => setTagsOpen(false)}
         />
@@ -333,6 +340,7 @@ export default function FolderItem({
           x={menu.x}
           y={menu.y}
           entries={menuEntries}
+          language={language}
           onSelect={handleMenuSelect}
           onClose={() => {
             setMenu(null);

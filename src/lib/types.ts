@@ -92,12 +92,17 @@ export interface CliPaths {
   claude: string;
   omp: string;
   opencode: string;
+  codexOverride?: string | null;
+  claudeOverride?: string | null;
+  ompOverride?: string | null;
+  opencodeOverride?: string | null;
   /** 探测时间戳（毫秒），0 表示从未探测。 */
   probedAt: number;
 }
 
 /** 用户设置。 */
 export interface AppSettings {
+  language: "zh-CN" | "en-US";
   theme: "dark" | "light" | "system";
   defaultEditor: string;
   globalHotkey: string;
@@ -165,6 +170,10 @@ export const EMPTY_CLI_PATHS: CliPaths = {
   claude: "",
   omp: "",
   opencode: "",
+  codexOverride: null,
+  claudeOverride: null,
+  ompOverride: null,
+  opencodeOverride: null,
   probedAt: 0,
 };
 
@@ -225,6 +234,7 @@ export const LEGACY_QUICK_HOTKEYS: readonly string[] = ["Ctrl+Shift+Space", "Sup
 
 /** 默认设置：与 Rust `AppSettings::default()` 保持一致。 */
 export const DEFAULT_SETTINGS: AppSettings = {
+  language: "zh-CN",
   theme: "dark",
   defaultEditor: "vscode",
   globalHotkey: "Ctrl+Alt+V",

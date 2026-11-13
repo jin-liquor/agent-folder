@@ -69,6 +69,8 @@ export const resolveCliPaths = () => invoke<[string, string][]>("resolve_cli_pat
 /** 重新探测全部 CLI 路径并写回设置。 */
 export const refreshCliPaths = () =>
   invoke<[CliPaths, CliAgentStatus]>("refresh_cli_paths");
+export const setCliPath = (agent: CliAgentId, path: string | null) =>
+  invoke<CliPaths>("set_cli_path", { agent, path });
 /** `record` 为真时顺带写入打开历史（浮窗打开磁盘结果时使用）。 */
 export const openCliAgent = (path: string, agent: CliAgentId, record = false) =>
   invoke<string>("open_cli_agent", { path, agent, record });

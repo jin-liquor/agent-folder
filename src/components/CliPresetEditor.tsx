@@ -5,6 +5,7 @@
  * 改名、改参数、删除自建项；内置项只读，保证「默认模式」语义稳定。
  */
 import { useRef, useState } from "react";
+import type { Language } from "../lib/i18n";
 import type { CliAgentId, CliPreset, CliPresets } from "../lib/types";
 import { CheckIcon, PlusIcon, TrashIcon } from "./Icons";
 
@@ -20,6 +21,8 @@ interface Props {
   onSelect: (id: string) => void;
   /** 保存用户预设列表（增删改都走这里）。 */
   onChange: (presets: CliPreset[]) => void;
+  /** 当前界面语言。 */
+  language: Language;
   /** 该 CLI 的附加参数占位示例。 */
   placeholder: string;
 }
@@ -40,7 +43,10 @@ export default function CliPresetEditor({
   onSelect,
   onChange,
   placeholder,
+  language,
 }: Props) {
+  const english = language === "en-US";
+  const text = (zh: string, en: string) => (english ? en : zh);
   const [editingId, setEditingId] = useState<string | null>(null);
   /**
    * 打开编辑前的预设快照。
@@ -58,7 +64,7 @@ export default function CliPresetEditor({
 
   const addPreset = () => {
     const id = nextPresetId(userPresets);
-    const preset: CliPreset = { id, name: "新预设", args: "", builtin: false };
+    const preset: CliPreset = { id, name: text("新预设", "New preset"), args: "", builtin: false };
     originalPresets.current = userPresets;
     onChange([...userPresets, preset]);
     onSelect(id);
@@ -82,7 +88,7 @@ export default function CliPresetEditor({
       <div className="flex items-center gap-1">
         <select
           value={selected}
-          aria-label={`${agent} 启动模式`}
+          aria-label={`${agent} ${text("启动模式", "launch mode")}`}
           onChange={(event) => {
             onSelect(event.target.value);
             setEditingId(null);
@@ -102,8 +108,8 @@ export default function CliPresetEditor({
 
         <button
           type="button"
-          title="新增预设"
-          aria-label={`为 ${agent} 新增预设`}
+          title={text("新增预设", "Add preset")}
+          aria-label={`${text("为", "Add a preset for")} ${agent}`}
           onClick={addPreset}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--glass-border)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
         >
@@ -111,8 +117,8 @@ export default function CliPresetEditor({
         </button>
         <button
           type="button"
-          title={isBuiltin ? "内置预设不可删除" : "删除该预设"}
-          aria-label="删除预设"
+          title={isBuiltin ? text("内置预设不可删除", "Built-in presets cannot be deleted") : text("删除该预设", "Delete preset")}
+          aria-label={text("删除预设", "Delete preset")}
           disabled={isBuiltin}
           onClick={() => current && removePreset(current.id)}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--glass-border)] text-[var(--text-secondary)] transition hover:border-[var(--danger)] hover:text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-[var(--glass-border)] disabled:hover:text-[var(--text-secondary)]"
@@ -125,15 +131,15 @@ export default function CliPresetEditor({
         <div className="flex flex-col gap-1 rounded-md border border-[var(--accent)] p-1.5">
           <input
             value={userPresets.find((p) => p.id === editingId)?.name ?? ""}
-            aria-label="预设名称"
+            aria-label={text("预设名称", "Preset name")}
             maxLength={40}
-            placeholder="预设名称"
+            placeholder={text("预设名称", "Preset name")}
             onChange={(event) => updatePreset(editingId, { name: event.target.value })}
             className="h-7 rounded border border-[var(--glass-border)] bg-transparent px-1.5 text-[11px] text-[var(--text-primary)] outline-none"
           />
           <input
             value={userPresets.find((p) => p.id === editingId)?.args ?? ""}
-            aria-label="预设参数"
+            aria-label={text("预设参数", "Preset arguments")}
             maxLength={512}
             spellCheck={false}
             placeholder={placeholder}
@@ -149,7 +155,7 @@ export default function CliPresetEditor({
             className="flex items-center justify-center gap-1 self-end rounded border border-[var(--glass-border)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             <CheckIcon size={10} />
-            完成
+            {text("完成", "Done")}
           </button>
           <button
             type="button"
@@ -164,7 +170,7 @@ export default function CliPresetEditor({
             }}
             className="flex items-center justify-center gap-1 self-end rounded border border-[var(--glass-border)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--danger)] hover:text-[var(--danger)]"
           >
-            取消
+            {text("取消", "Cancel")}
           </button>
         </div>
       )}
@@ -180,13 +186,15 @@ export default function CliPresetEditor({
           }}
           className="self-start text-[10px] text-[var(--text-secondary)] underline-offset-2 transition hover:text-[var(--accent)] hover:underline"
         >
-          编辑「{current.name}」的参数
+          {english ? `Edit “${current.name}” arguments` : `编辑「${current.name}」的参数`}
         </button>
       )}
 
       {!editingId && isBuiltin && current && (
         <span className="text-[10px] leading-relaxed text-[var(--text-secondary)]">
-          {current.args ? `内置参数：${current.args}` : "内置参数：无（不附加任何参数）"}
+          {current.args
+            ? `${text("内置参数", "Built-in arguments")}: ${current.args}`
+            : text("内置参数：无（不附加任何参数）", "Built-in arguments: none")}
         </span>
       )}
     </div>
