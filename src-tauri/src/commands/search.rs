@@ -68,23 +68,34 @@ pub fn spawn_index_build(app: AppHandle, force: bool) {
         }
     }
 
-    let cancel = app.state::<index::IndexStore>().begin(roots.clone());
-    let Some(cancel) = cancel else {
+    let Some(handle) = app.state::<index::IndexStore>().begin(roots.clone()) else {
         // 已有构建在跑，本次跳过；下一轮刷新会补上。
         return;
     };
+    let cancel = handle.cancel.clone();
+    let generation = handle.generation;
 
     let builder = std::thread::Builder::new().name("disk-index".into());
     let worker = app.clone();
     let spawned = builder.spawn(move || {
         let index = worker.state::<index::IndexStore>();
         let outcome = index::build(&roots, MAX_DEPTH, &cancel, &|scanned| {
-            index.set_scanned(scanned);
+            index.set_scanned(scanned, generation);
         });
+
+        // 构建被取消时拿到的是半截结果：既不提交快照，也不写入缓存。
+        // 否则关掉磁盘搜索后索引会「复活」，下次启动还会直接加载这份残缺缓存。
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            index.abort(generation);
+            return;
+        }
 
         let built_at = now_ms();
         let cache = outcome.to_cache(fingerprint.clone(), built_at);
-        index.finish(outcome, built_at);
+        if !index.finish(outcome, built_at, generation) {
+            // 已有更新的构建接手，本次结果作废。
+            return;
+        }
 
         if let Err(error) = index_cache::save(&index_cache::path(), &cache) {
             // 缓存写不进去只影响下次启动速度，不影响本次结果。
@@ -94,7 +105,7 @@ pub fn spawn_index_build(app: AppHandle, force: bool) {
 
     if let Err(error) = spawned {
         app.state::<index::IndexStore>()
-            .fail(Some(format!("无法启动索引线程：{error}")));
+            .fail(Some(format!("无法启动索引线程：{error}")), generation);
     }
 }
 
