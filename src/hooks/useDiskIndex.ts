@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getIndexStatus, searchIndex } from "../lib/commands";
-import type { IndexSearchResult, IndexStatus } from "../lib/types";
+import type { IndexSearchResult, IndexStatus, SearchHit } from "../lib/types";
 
 /** 输入停止后多久发起查询（毫秒）。 */
 const DEBOUNCE_MS = 120;
@@ -14,6 +14,14 @@ const DEBOUNCE_MS = 120;
 const MIN_QUERY_LENGTH = 2;
 /** 索引构建中的状态轮询间隔。 */
 const STATUS_POLL_MS = 1200;
+
+/**
+ * 未命中时的空数组。
+ *
+ * 写成模块级常量：每次渲染都新建一个空数组会让下游依赖它的
+ * `useMemo` 全部失效，列表随之整片重建。
+ */
+const NO_HITS: SearchHit[] = [];
 
 export function useDiskIndex(query: string, enabled: boolean, limit = 20) {
   const [result, setResult] = useState<IndexSearchResult | null>(null);
@@ -72,7 +80,11 @@ export function useDiskIndex(query: string, enabled: boolean, limit = 20) {
           timer = window.setTimeout(poll, STATUS_POLL_MS);
         }
       } catch {
-        // 状态查询失败不应影响搜索本身。
+        // 状态查询失败不应影响搜索本身，但也不能就此停轮询：
+        // 否则索引状态会永久停在「正在建立」。
+        if (alive) {
+          timer = window.setTimeout(poll, STATUS_POLL_MS);
+        }
       }
     };
 
@@ -101,7 +113,7 @@ export function useDiskIndex(query: string, enabled: boolean, limit = 20) {
   }, [indexStatus, result]);
 
   return {
-    hits: active ? (result?.hits ?? []) : [],
+    hits: active ? (result?.hits ?? NO_HITS) : NO_HITS,
     status,
     searching: active && searching,
   };

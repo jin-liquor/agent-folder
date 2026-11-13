@@ -4,7 +4,7 @@
  * 每个改动立即持久化；失败时回滚草稿并提示原因。
  */
 import { AnimatePresence, motion } from "framer-motion";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import * as system from "../lib/system";
 import { LANGUAGE_OPTIONS } from "../lib/i18n";
@@ -134,8 +134,21 @@ export default function SettingsDrawer({
   });
   const [cliErrors, setCliErrors] = useState<Partial<Record<CliAgentId, string>>>({});
   const [probing, setProbing] = useState(false);
+  /**
+   * 索引重建的轮询定时器。
+   *
+   * 抽屉收起时组件会卸载，定时器若不清理就会一直空转并写状态。
+   */
+  const rebuildTimerRef = useRef<number | undefined>(undefined);
   const label = (zh: string, en: string) => (draft.language === "en-US" ? en : zh);
 
+  useEffect(() => {
+    return () => {
+      if (rebuildTimerRef.current !== undefined) {
+        window.clearInterval(rebuildTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -235,14 +248,17 @@ export default function SettingsDrawer({
             setIndexStatus(next);
             if (!next.building) {
               window.clearInterval(timer);
+              rebuildTimerRef.current = undefined;
               setIndexBusy(false);
             }
           })
           .catch(() => {
             window.clearInterval(timer);
+            rebuildTimerRef.current = undefined;
             setIndexBusy(false);
           });
       }, 1200);
+      rebuildTimerRef.current = timer;
     } catch (error) {
       setIndexBusy(false);
       onToast(label(`重建索引失败：${errorText(error, draft.language)}`, `Index rebuild failed: ${errorText(error, draft.language)}`));
