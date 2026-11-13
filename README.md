@@ -36,7 +36,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The latest release is **v1.2.1**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
+The latest release is **v1.2.3**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
 
 ## Installation
 

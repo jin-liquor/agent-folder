@@ -2,6 +2,28 @@
 
 All notable user-facing changes are recorded here. / 记录面向用户的重要变更。
 
+## [1.2.3] - 2026-11-13
+
+### Fixed / 修复
+
+- 右键菜单打开后，菜单内的回车、Esc 和上下键不再同时触发全局键盘导航，避免“选中菜单项”和“用默认编辑器打开文件夹”同时发生。 / Keys pressed inside the context menu no longer reach the global keyboard navigation, so selecting a menu item no longer also opens the folder in the default editor.
+- 行内图标按钮聚焦后按回车会触发按钮本身，而不是被全局导航改写成“用默认编辑器打开”。 / Enter on a focused inline icon button now activates that button instead of being rewritten into an open action.
+- 托盘打开文件夹后的历史记录保存失败会回滚内存状态并输出诊断信息，不再出现“界面多一条记录、重启即消失”。 / A failed history save after opening from the tray now rolls the in-memory state back instead of leaving a record that disappears on restart.
+- 保存闭包自身报错时同样回滚内存状态，避免内存与磁盘分叉。 / A closure that mutates memory and then returns an error now rolls back as well.
+- 磁盘索引被取消或关闭后，在途构建的半截结果不再提交，也不会写入缓存。 / A cancelled or disabled disk-index build no longer commits partial results or writes them to the cache.
+- 数据文件改用一次原子替换并强制落盘，消除“先改名成 .bak 再改名成目标”造成的目标文件短暂不存在窗口。 / Data files are now replaced in one atomic rename after fsync, removing the window where the target file briefly did not exist.
+- 英文界面不再漏出中文：VS Code 打开失败提示、磁盘结果行标签、相对时间描述、已知错误说明与内置 CLI 预设名均已双语化。 / The English interface no longer leaks Chinese text in the VS Code failure prompt, disk result label, relative-time wording, known-error messages, and built-in CLI preset names.
+- 磁盘扫描查询先去除首尾空白，输入一个空格不再触发整盘遍历。 / Disk scan queries are trimmed, so a whitespace-only query no longer walks the whole disk.
+- 添加空路径被拒绝；重命名后同步刷新托盘菜单；索引状态轮询失败不再永久停止；设置抽屉重建索引的定时器会随组件卸载清理；跳过目录名的比较改为大小写不敏感。 / Empty paths are rejected, renames refresh the tray menu, index status polling recovers from a failed request, the settings drawer clears its rebuild timer on unmount, and skipped-directory matching is case-insensitive.
+
+### Improved / 改进
+
+- Rust 测试套件不再依赖宿主系统的路径语义，在 macOS 与 Linux 上同样可运行。 / The Rust test suite no longer depends on host path semantics and runs on macOS and Linux as well.
+
+### Added / 新增
+
+- 新增 GitHub Actions 工作流，在每次推送和 PR 上运行前端类型检查与单元测试，以及 Rust 格式检查与库测试。 / Added a GitHub Actions workflow that runs frontend typecheck and unit tests plus Rust format checks and library tests on every push and pull request.
+
 ## [1.2.1] - 2026-11-13
 
 ### Added / 新增
