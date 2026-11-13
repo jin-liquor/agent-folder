@@ -30,7 +30,15 @@ pub(crate) fn mutate_and_save<T>(
     // 全程持有同一把锁，杜绝中途被其他命令插入。
     let mut data = store.data();
     let snapshot = data.clone();
-    let outcome = mutate(&mut data)?;
+    // 闭包可能「先改内存、再报错」，所以 Err 分支同样要回滚：
+    // 否则内存停在半更新状态，磁盘上却没有这次改动，两者就此分叉。
+    let outcome = match mutate(&mut data) {
+        Ok(value) => value,
+        Err(error) => {
+            *data = snapshot;
+            return Err(error);
+        }
+    };
 
     if let Err(error) = store.save_locked(&data) {
         // 回滚：仍是同一把锁，不会有其他线程观察到中间状态。
@@ -53,6 +61,11 @@ pub fn add_folder(
     state: State<Store>,
     path: String,
 ) -> Result<FolderRecord, String> {
+    // 空路径会生成一条既没有路径也没有名字的记录，落盘后还会被
+    // `find_by_path("")` 命中，界面上多出一行无名条目。
+    if path.trim().is_empty() {
+        return Err("路径不能为空".into());
+    }
     let record = mutate_and_save(&state, |data| Ok(data.add_folder(&path)))?;
     tray::rebuild_menu(&app);
     Ok(record)
@@ -91,6 +104,7 @@ pub fn toggle_favorite(
 /// 重命名记录（仅影响展示名，不改变磁盘路径）。
 #[tauri::command]
 pub fn rename_folder(
+    app: AppHandle,
     state: State<Store>,
     id: String,
     name: String,
@@ -99,11 +113,14 @@ pub fn rename_folder(
     if trimmed.is_empty() {
         return Err("名称不能为空".into());
     }
-    mutate_and_save(&state, |data| {
+    let record = mutate_and_save(&state, |data| {
         let folder = data.find_mut(&id).ok_or("记录不存在")?;
         folder.name = trimmed;
         Ok(folder.clone())
-    })
+    })?;
+    // 托盘菜单里显示的就是记录名，改完要同步刷新。
+    tray::rebuild_menu(&app);
+    Ok(record)
 }
 
 /// 设置记录颜色，传 `None` 表示清除。

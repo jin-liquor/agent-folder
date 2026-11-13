@@ -207,7 +207,7 @@ export default function QuickLaunch() {
         setDraft("");
         await dismiss();
       } catch (err) {
-        setError(errorText(err));
+        setError(errorText(err, settings.language));
       }
     },
     [openPath, settings.language],
@@ -374,7 +374,7 @@ export default function QuickLaunch() {
                       onOpencode={() => void perform(row, "opencode")}
                       onReveal={() =>
                         void revealInExplorer(path).catch((err: unknown) =>
-                          setError(errorText(err)),
+                          setError(errorText(err, settings.language)),
                         )
                       }
                     />

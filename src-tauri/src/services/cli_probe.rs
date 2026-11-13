@@ -325,10 +325,15 @@ mod tests {
         let exe = bin.join("demo.exe");
         std::fs::write(&exe, b"stub").unwrap();
 
+        // shim 里的路径分隔符跟随宿主系统：解析逻辑本身与平台无关，
+        // 但拼出来的路径必须真的指向磁盘上那个 exe。
+        let sep = std::path::MAIN_SEPARATOR;
         let shim = dir.join("demo.cmd");
         std::fs::write(
             &shim,
-            "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\n:start\r\n\"%dp0%\\node_modules\\demo\\demo.exe\"   %*\r\n",
+            format!(
+                "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\n:start\r\n\"%dp0%{sep}node_modules{sep}demo{sep}demo.exe\"   %*\r\n"
+            ),
         )
         .unwrap();
 

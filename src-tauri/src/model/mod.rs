@@ -38,10 +38,15 @@ pub fn normalize_path(path: &str) -> String {
 }
 
 /// 从绝对路径推导出展示名；取不到文件名时退回完整路径。
+///
+/// 路径经 [`normalize_path`] 之后一律是 Windows 风格（反斜杠分隔），
+/// 因此这里按反斜杠切分，**不依赖宿主系统的路径语义**：
+/// `std::path::Path::file_name` 在 Linux/macOS 上不认反斜杠，
+/// `C:\Projects\App` 会被当成一个整体，名字退化成整条路径。
 pub fn display_name_of(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
+    path.rsplit('\\')
+        .find(|part| !part.is_empty())
+        .map(str::to_string)
         .unwrap_or_else(|| path.to_string())
 }
 

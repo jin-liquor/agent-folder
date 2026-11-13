@@ -89,25 +89,40 @@ export default function ContextMenu({ x, y, entries, language, onSelect, onClose
       if (!ref.current?.contains(event.target as Node)) onClose();
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      // 菜单打开期间键盘归菜单所有。
+      //
+      // 这里在 window 的**捕获阶段**监听，事件随后仍会冒泡到 window
+      // 上的全局键盘导航。若不在这里拦下，菜单里按回车会在触发菜单动作
+      // 的同时，顺带用默认编辑器打开选中的文件夹；按 Esc 会顺带清空
+      // 搜索框；上下键会同时移动菜单高亮与列表选中条。
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
         return;
       }
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setActiveIndex((index) => (index + 1) % selectable.length);
+        event.stopPropagation();
+        if (selectable.length > 0) {
+          setActiveIndex((index) => (index + 1) % selectable.length);
+        }
         return;
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setActiveIndex((index) => (index <= 0 ? selectable.length - 1 : index - 1));
+        event.stopPropagation();
+        if (selectable.length > 0) {
+          setActiveIndex((index) => (index <= 0 ? selectable.length - 1 : index - 1));
+        }
         return;
       }
       if (event.key === "Enter") {
-        const item = selectable[activeIndex];
+        event.preventDefault();
+        event.stopPropagation();
+        // 键盘打开菜单时还没有高亮项，此时回车等同选中第一项。
+        const item = selectable[activeIndex] ?? selectable[0];
         if (item && !item.disabled) {
-          event.preventDefault();
           onSelect(item.id);
         }
       }

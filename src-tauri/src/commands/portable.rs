@@ -4,7 +4,6 @@
 //! 导入：读取外部 JSON，**合并**进现有数据而不是整体覆盖，避免误操作清空历史。
 
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
@@ -57,66 +56,9 @@ pub fn export_data(state: State<Store>, path: String) -> Result<usize, String> {
     };
 
     let json = serde_json::to_string_pretty(&bundle).map_err(|e| format!("序列化失败：{e}"))?;
-    atomic_write(Path::new(&path), json.as_bytes())?;
+    // 复用存储层统一的原子写：临时文件落盘后原子替换，失败时原文件保持不变。
+    crate::storage::write_atomic(Path::new(&path), json.as_bytes())?;
     Ok(folders.len())
-}
-
-fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let name = path.file_name().ok_or_else(|| "导出路径无效".to_string())?;
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let suffix = format!("{}-{stamp}", std::process::id());
-    let temporary = parent.join(format!(".{}.{}.tmp", name.to_string_lossy(), suffix));
-    let backup = parent.join(format!(".{}.{}.bak", name.to_string_lossy(), suffix));
-
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .map_err(|e| format!("创建临时导出文件失败：{e}"))?;
-    if let Err(error) = file.write_all(contents).and_then(|_| file.sync_all()) {
-        let _ = std::fs::remove_file(&temporary);
-        return Err(format!("写入临时导出文件失败：{error}"));
-    }
-    drop(file);
-
-    let had_target = match std::fs::metadata(path) {
-        Ok(metadata) if metadata.is_file() => {
-            std::fs::rename(path, &backup).map_err(|e| {
-                let _ = std::fs::remove_file(&temporary);
-                format!("无法保留现有导出文件：{e}")
-            })?;
-            true
-        }
-        Ok(_) => {
-            let _ = std::fs::remove_file(&temporary);
-            return Err("导出目标已存在但不是普通文件".into());
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-        Err(error) => {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(format!("检查导出目标失败：{error}"));
-        }
-    };
-
-    if let Err(error) = std::fs::rename(&temporary, path) {
-        if had_target {
-            let _ = std::fs::rename(&backup, path);
-        }
-        let _ = std::fs::remove_file(&temporary);
-        return Err(format!("替换导出文件失败：{error}"));
-    }
-    if had_target {
-        let _ = std::fs::remove_file(backup);
-    }
-    Ok(())
 }
 
 /// 从指定路径导入记录，按路径去重后合并。

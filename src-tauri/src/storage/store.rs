@@ -190,13 +190,8 @@ impl Store {
                 .unwrap_or_else(|| "数据处于只读保护状态，拒绝写入".into()));
         }
         let json = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
-
-        let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, json).map_err(|e| format!("写入数据失败：{e}"))?;
-        fs::rename(&tmp, &self.path).map_err(|e| {
-            let _ = fs::remove_file(&tmp);
-            format!("替换数据文件失败：{e}")
-        })
+        // 走统一的原子写：临时文件落盘后再原子替换，避免中途断电留下半个 JSON。
+        write_atomic(&self.path, json.as_bytes())
     }
 
     /// 获取数据锁，容忍「锁中毒」。
@@ -230,6 +225,19 @@ impl Store {
     }
 }
 
+/// 原子写入：先写临时文件并落盘，再原子替换目标文件。
+///
+/// 三条约束，缺一不可：
+/// 1. 临时文件写完必须 `sync_all`，否则断电后替换上去的可能是一个空文件；
+/// 2. 替换用一次 `rename` 完成。Windows 上 `fs::rename` 走
+///    `MoveFileEx(MOVEFILE_REPLACE_EXISTING)`，Unix 上是 `rename(2)`，
+///    两者都是原子的：目标文件要么是旧内容，要么是新内容；
+/// 3. 临时文件名带进程号与时间戳，避免并发写入时互相覆盖。
+///
+/// 旧实现是「先把目标改名成 `.bak`，再把临时文件改名成目标」。
+/// 两次改名之间目标文件是**不存在**的，那段时间里断电或崩溃，
+/// 磁盘上就只剩一个应用并不认识的 `.bak`——用户的 `data.json` 看起来凭空消失。
+/// 直接覆盖没有这个中间态，失败时原文件原封不动。
 pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
@@ -242,7 +250,6 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
         .unwrap_or(0);
     let suffix = format!("{}-{stamp}", std::process::id());
     let temporary = parent.join(format!(".{}.{}.tmp", name.to_string_lossy(), suffix));
-    let backup = parent.join(format!(".{}.{}.bak", name.to_string_lossy(), suffix));
 
     use std::io::Write;
     let mut file = fs::OpenOptions::new()
@@ -256,34 +263,23 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), String> {
     }
     drop(file);
 
-    let had_target = match fs::metadata(path) {
-        Ok(metadata) if metadata.is_file() => {
-            if let Err(error) = fs::rename(path, &backup) {
-                let _ = fs::remove_file(&temporary);
-                return Err(format!("无法保留原文件：{error}"));
-            }
-            true
-        }
-        Ok(_) => {
+    // 目标是目录等非普通文件时替换必然失败，提前给出可读的原因。
+    match fs::metadata(path) {
+        Ok(metadata) if !metadata.is_file() => {
             let _ = fs::remove_file(&temporary);
             return Err("目标已存在但不是普通文件".into());
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => {
             let _ = fs::remove_file(&temporary);
             return Err(format!("检查目标文件失败：{error}"));
         }
-    };
+    }
 
     if let Err(error) = fs::rename(&temporary, path) {
-        if had_target {
-            let _ = fs::rename(&backup, path);
-        }
         let _ = fs::remove_file(&temporary);
         return Err(format!("替换文件失败：{error}"));
-    }
-    if had_target {
-        let _ = fs::remove_file(backup);
     }
     Ok(())
 }

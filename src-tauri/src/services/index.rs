@@ -322,6 +322,20 @@ struct Inner {
     scanned: usize,
     error: Option<String>,
     cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// 构建代号：每次 `begin` / `disable` 递增一次。
+    ///
+    /// 用来识别「过期的构建」：索引被关闭或重建后，先前那次构建的
+    /// 线程仍会回来交结果，若不校验代号，半截结果就会覆盖新状态。
+    generation: u64,
+}
+
+/// 一次构建的句柄：取消标志 + 构建代号。
+#[derive(Debug, Clone)]
+pub struct BuildHandle {
+    /// 置位后构建应尽快停止。
+    pub cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// 本次构建的代号，交回结果时用于校验是否仍然有效。
+    pub generation: u64,
 }
 
 /// 应用级索引状态（通过 `manage` 注入）。
@@ -349,6 +363,7 @@ impl IndexStore {
                 scanned: 0,
                 error: None,
                 cancel: None,
+                generation: 0,
             }),
         }
     }
@@ -424,30 +439,44 @@ impl IndexStore {
     }
 
     /// 开始一次构建；已有构建在跑时返回 `None`。
-    pub fn begin(
-        &self,
-        roots: Vec<String>,
-    ) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+    ///
+    /// 返回的 [`BuildHandle`] 携带构建代号，交回结果时用于校验有效性。
+    pub fn begin(&self, roots: Vec<String>) -> Option<BuildHandle> {
         let mut inner = self.lock();
         if inner.building {
             return None;
         }
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        inner.generation += 1;
         inner.building = true;
         inner.scanned = 0;
         inner.roots = roots;
         inner.error = None;
         inner.cancel = Some(cancel.clone());
-        Some(cancel)
+        Some(BuildHandle {
+            cancel,
+            generation: inner.generation,
+        })
     }
 
-    pub fn set_scanned(&self, scanned: usize) {
-        self.lock().scanned = scanned;
+    /// 汇报构建进度；代号不匹配说明本次构建已过期，进度不再写入。
+    pub fn set_scanned(&self, scanned: usize, generation: u64) {
+        let mut inner = self.lock();
+        if inner.generation != generation {
+            return;
+        }
+        inner.scanned = scanned;
     }
 
     /// 用构建结果替换快照。
-    pub fn finish(&self, outcome: BuildOutcome, built_at: i64) {
+    ///
+    /// 返回 `false` 表示本次结果已过期（索引被关闭，或已有更新的构建接手），
+    /// 调用方据此**不要**把这份不完整的结果落盘。
+    pub fn finish(&self, outcome: BuildOutcome, built_at: i64, generation: u64) -> bool {
         let mut inner = self.lock();
+        if inner.generation != generation {
+            return false;
+        }
         inner.entries = outcome.entries;
         inner.truncated = outcome.truncated;
         inner.warnings = outcome.warnings;
@@ -456,11 +485,15 @@ impl IndexStore {
         inner.building = false;
         inner.cancel = None;
         inner.error = None;
+        true
     }
 
     /// 构建失败或扫描被关闭。
-    pub fn fail(&self, error: Option<String>) {
+    pub fn fail(&self, error: Option<String>, generation: u64) {
         let mut inner = self.lock();
+        if inner.generation != generation {
+            return;
+        }
         inner.building = false;
         inner.cancel = None;
         inner.error = error;
@@ -469,10 +502,24 @@ impl IndexStore {
         }
     }
 
+    /// 构建被取消：只清理构建状态，不动已有快照。
+    pub fn abort(&self, generation: u64) {
+        let mut inner = self.lock();
+        if inner.generation != generation {
+            return;
+        }
+        inner.building = false;
+        inner.cancel = None;
+        inner.error = None;
+    }
+
     /// 关闭磁盘搜索：停止构建并丢弃快照。
     pub fn disable(&self) {
         self.cancel_current();
         let mut inner = self.lock();
+        // 代号递增：在途构建交回结果时会发现代号已变，从而丢弃半截结果，
+        // 不会把「已关闭」的索引重新点亮，也不会写入残缺缓存。
+        inner.generation += 1;
         inner.entries.clear();
         inner.roots.clear();
         inner.built_at = 0;
@@ -508,18 +555,26 @@ mod tests {
         dir
     }
 
-    fn make(dir: &std::path::Path, relative: &str) {
-        std::fs::create_dir_all(dir.join(relative)).expect("无法创建目录");
+    /// 按路径段创建目录。
+    ///
+    /// 逐段 `push` 而不是把整条路径写成一个字符串常量：
+    /// 写死反斜杠在非 Windows 上只是普通字符，测试会测不到真实行为。
+    fn make(dir: &std::path::Path, segments: &[&str]) {
+        let mut path = dir.to_path_buf();
+        for segment in segments {
+            path.push(segment);
+        }
+        std::fs::create_dir_all(&path).expect("无法创建目录");
     }
 
     #[test]
     fn build_skips_dependencies_and_system_dirs() {
         let root = scratch("skip");
-        make(&root, "projects\\\\alpha");
-        make(&root, "projects\\\\alpha\\\\node_modules\\\\left-pad");
-        make(&root, "Windows\\\\System32");
-        make(&root, "projects\\\\.hidden");
-        make(&root, "projects\\\\alpha\\\\target");
+        make(&root, &["projects", "alpha"]);
+        make(&root, &["projects", "alpha", "node_modules", "left-pad"]);
+        make(&root, &["Windows", "System32"]);
+        make(&root, &["projects", ".hidden"]);
+        make(&root, &["projects", "alpha", "target"]);
 
         let outcome = build(
             &[root.to_string_lossy().to_string()],
@@ -544,7 +599,7 @@ mod tests {
     #[test]
     fn build_respects_depth_limit() {
         let root = scratch("depth");
-        make(&root, "a\\\\b\\\\c\\\\d\\\\e");
+        make(&root, &["a", "b", "c", "d", "e"]);
 
         let outcome = build(
             &[root.to_string_lossy().to_string()],
@@ -569,17 +624,43 @@ mod tests {
     }
 
     #[test]
+    fn stale_build_result_is_rejected() {
+        // 索引被关闭后，在途构建交回的结果必须被丢弃：
+        // 否则「关掉磁盘搜索」之后索引会自己复活，且残缺结果还会被写进缓存。
+        let store = IndexStore::new();
+        let handle = store
+            .begin(vec!["C:\\scan-root".to_string()])
+            .expect("应当开始构建");
+        store.disable();
+
+        assert!(
+            !store.finish(BuildOutcome::default(), 1, handle.generation),
+            "过期构建的结果不应被接受"
+        );
+        assert!(!store.status().ready, "索引应保持关闭状态");
+    }
+
+    #[test]
+    fn abort_clears_build_state_only() {
+        let store = IndexStore::new();
+        let handle = store
+            .begin(vec!["C:\\scan-root".to_string()])
+            .expect("应当开始构建");
+        store.abort(handle.generation);
+
+        let status = store.status();
+        assert!(!status.building, "取消后不应仍在构建");
+        assert!(!status.ready, "取消的构建不应让索引就绪");
+    }
+
+    #[test]
     fn overlapping_roots_do_not_duplicate_entries() {
         let root = scratch("overlap");
-        make(&root, "projects\\\\alpha");
+        make(&root, &["projects", "alpha"]);
 
         let base = root.to_string_lossy().to_string();
-        let outcome = build(
-            &[base.clone(), format!("{base}\\\\projects")],
-            MAX_DEPTH,
-            &AtomicBool::new(false),
-            &|_| {},
-        );
+        let nested = root.join("projects").to_string_lossy().to_string();
+        let outcome = build(&[base, nested], MAX_DEPTH, &AtomicBool::new(false), &|_| {});
         let mut unique: Vec<String> = outcome
             .entries
             .iter()
@@ -633,7 +714,7 @@ mod tests {
     fn cancel_stops_the_walk() {
         let root = scratch("cancel");
         for i in 0..50 {
-            make(&root, &format!("dir{i}\\\\sub"));
+            make(&root, &[&format!("dir{i}"), "sub"]);
         }
         let cancel = AtomicBool::new(true);
         let outcome = build(
@@ -651,30 +732,31 @@ mod tests {
         let store = IndexStore::new();
         assert!(!store.status().ready);
 
-        let cancel = store.begin(vec!["C:\\\\".into()]).expect("首次应能开始");
+        let handle = store.begin(vec!["C:\\\\".into()]).expect("首次应能开始");
         assert!(store.status().building);
         assert!(
             store.begin(vec!["C:\\\\".into()]).is_none(),
             "重复开始应被拒绝"
         );
 
-        store.set_scanned(128);
+        store.set_scanned(128, handle.generation);
         assert_eq!(store.status().scanned, 128);
 
-        store.finish(
+        assert!(store.finish(
             BuildOutcome {
                 entries: vec![entry("C:\\\\p\\\\alpha", 2)],
                 truncated: false,
                 warnings: vec![],
             },
             42,
-        );
+            handle.generation,
+        ));
         let status = store.status();
         assert!(status.ready);
         assert!(!status.building);
         assert_eq!(status.entries, 1);
         assert_eq!(status.built_at, 42);
-        assert!(!cancel.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!handle.cancel.load(std::sync::atomic::Ordering::Relaxed));
 
         assert_eq!(store.search("alpha", 5).hits.len(), 1);
     }

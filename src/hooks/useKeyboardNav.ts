@@ -23,6 +23,37 @@ interface Options {
   isSearchFocused: () => boolean;
 }
 
+/** 事件目标里与键盘归属相关的最小信息。 */
+export interface KeyTarget {
+  tagName?: string;
+  isContentEditable?: boolean;
+}
+
+/**
+ * 目标是否是文本输入类控件。
+ *
+ * 输入框里的按键属于用户正在输入的内容，全局导航不能抢。
+ */
+export function isTextInput(target: KeyTarget | null | undefined): boolean {
+  if (!target) return false;
+  const tag = (target.tagName ?? "").toUpperCase();
+  return (
+    tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || target.isContentEditable === true
+  );
+}
+
+/**
+ * 回车是否应交给焦点所在的控件自己处理。
+ *
+ * 行内的图标按钮（启动 Codex、收藏等）也是 `<button>`：聚焦后按回车
+ * 应该触发按钮本身，而不是被全局导航改成「用默认编辑器打开」。
+ * 搜索框是例外——那里的回车本就该打开当前行，由调用方另行放行。
+ */
+export function enterBelongsToControl(target: KeyTarget | null | undefined): boolean {
+  if (isTextInput(target)) return true;
+  return ((target?.tagName ?? "").toUpperCase()) === "BUTTON";
+}
+
 export function useKeyboardNav({
   rows,
   selected,
@@ -42,7 +73,6 @@ export function useKeyboardNav({
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      const typing = target.tagName === "INPUT" || target.tagName === "SELECT";
       const key = event.key.toLowerCase();
 
       // 全局快捷键优先，且不受设置面板状态影响。
@@ -56,6 +86,16 @@ export function useKeyboardNav({
         onOpenSettings();
         return;
       }
+
+      // 弹出层（右键菜单、添加文件夹对话框等）在**捕获阶段**监听按键，
+      // 处理完只调用了 preventDefault，事件仍会冒泡到这里。
+      // 这里必须让路：在右键菜单里按回车不该顺带用默认编辑器打开文件夹，
+      // 按 Esc 也不该顺带清空搜索框。
+      if (event.defaultPrevented) return;
+
+      const typing = isTextInput(target);
+      const controlOwnsEnter = enterBelongsToControl(target);
+
       if (event.key === "Escape") {
         if (settingsOpen) onCloseSettings();
         else if (query) onClearQuery();
@@ -75,7 +115,7 @@ export function useKeyboardNav({
         onSelect(Math.max(selected - 1, 0));
         return;
       }
-      if (event.key === "Enter" && (!typing || isSearchFocused())) {
+      if (event.key === "Enter" && (!controlOwnsEnter || isSearchFocused())) {
         const row = rows[selected];
         if (!row) return;
         event.preventDefault();
@@ -93,7 +133,7 @@ export function useKeyboardNav({
 
       const row = rows[selected];
       if (!row || row.kind !== "record") return;
-      if (event.ctrlKey && key === "d") {
+      if (event.ctrlKey && key === "d" && !typing) {
         event.preventDefault();
         onFavorite(row);
       } else if (event.key === "Delete" && !typing) {

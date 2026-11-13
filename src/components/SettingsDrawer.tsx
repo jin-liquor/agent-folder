@@ -4,7 +4,7 @@
  * 每个改动立即持久化；失败时回滚草稿并提示原因。
  */
 import { AnimatePresence, motion } from "framer-motion";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/useAppStore";
 import * as system from "../lib/system";
 import { LANGUAGE_OPTIONS } from "../lib/i18n";
@@ -134,7 +134,21 @@ export default function SettingsDrawer({
   });
   const [cliErrors, setCliErrors] = useState<Partial<Record<CliAgentId, string>>>({});
   const [probing, setProbing] = useState(false);
+  /**
+   * 索引重建的轮询定时器。
+   *
+   * 抽屉收起时组件会卸载，定时器若不清理就会一直空转并写状态。
+   */
+  const rebuildTimerRef = useRef<number | undefined>(undefined);
   const label = (zh: string, en: string) => (draft.language === "en-US" ? en : zh);
+
+  useEffect(() => {
+    return () => {
+      if (rebuildTimerRef.current !== undefined) {
+        window.clearInterval(rebuildTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -167,7 +181,7 @@ export default function SettingsDrawer({
       ).length;
       onToast(label(`已重新探测：${found} / 4 个 CLI 可用`, `Re-probed: ${found} / 4 CLIs available`));
     } catch (error) {
-      onToast(label(`探测失败：${errorText(error)}`, `Probe failed: ${errorText(error)}`));
+      onToast(label(`探测失败：${errorText(error, draft.language)}`, `Probe failed: ${errorText(error, draft.language)}`));
     } finally {
       setProbing(false);
     }
@@ -182,7 +196,7 @@ export default function SettingsDrawer({
       setCliErrors((current) => ({ ...current, [agent]: undefined }));
       onToast(path ? label(`${agent} 路径已保存`, `${agent} path saved`) : label(`${agent} 已恢复自动检测`, `${agent} automatic detection restored`));
     } catch (error) {
-      setCliErrors((current) => ({ ...current, [agent]: errorText(error) }));
+      setCliErrors((current) => ({ ...current, [agent]: errorText(error, draft.language) }));
     }
   };
 
@@ -198,7 +212,7 @@ export default function SettingsDrawer({
     setSaveError(null);
     void saveSettings(patch).catch((error: unknown) => {
       setDraft(useAppStore.getState().settings);
-      setSaveError(errorText(error));
+      setSaveError(errorText(error, draft.language));
     });
   };
 
@@ -215,7 +229,7 @@ export default function SettingsDrawer({
       onToast(status.toggleRegistered ? label("快捷键注册已刷新", "Shortcut registration refreshed") : label("主窗口快捷键仍未注册，请更换组合键", "Main window shortcut is still unregistered; choose another combination"));
     } catch (error) {
       setHotkeyStatus(await commands.getHotkeyStatus().catch(() => null));
-      onToast(label(`快捷键重试失败：${errorText(error)}`, `Shortcut retry failed: ${errorText(error)}`));
+      onToast(label(`快捷键重试失败：${errorText(error, draft.language)}`, `Shortcut retry failed: ${errorText(error, draft.language)}`));
     } finally {
       setRetryingHotkeys(false);
     }
@@ -234,17 +248,20 @@ export default function SettingsDrawer({
             setIndexStatus(next);
             if (!next.building) {
               window.clearInterval(timer);
+              rebuildTimerRef.current = undefined;
               setIndexBusy(false);
             }
           })
           .catch(() => {
             window.clearInterval(timer);
+            rebuildTimerRef.current = undefined;
             setIndexBusy(false);
           });
       }, 1200);
+      rebuildTimerRef.current = timer;
     } catch (error) {
       setIndexBusy(false);
-      onToast(label(`重建索引失败：${errorText(error)}`, `Index rebuild failed: ${errorText(error)}`));
+      onToast(label(`重建索引失败：${errorText(error, draft.language)}`, `Index rebuild failed: ${errorText(error, draft.language)}`));
     }
   };
 
