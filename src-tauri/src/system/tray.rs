@@ -8,6 +8,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
+use crate::commands::mutate_and_save;
 use crate::model::AppSettings;
 use crate::services::editor;
 use crate::storage::Store;
@@ -108,9 +109,12 @@ fn open_and_record(app: &AppHandle, path: &str) {
     match result {
         Ok(_) => {
             let store = app.state::<Store>();
-            store.data().upsert(path);
-            let _ = store.save();
-            rebuild_menu(app);
+            // 与其它写路径保持一致：改内存 → 存盘 → 失败回滚。
+            // 之前这里直接吞掉存盘错误，界面会多出一条记录、重启即消失。
+            match mutate_and_save(&store, |data| Ok(data.upsert(path))) {
+                Ok(_) => rebuild_menu(app),
+                Err(error) => eprintln!("从托盘打开文件夹后保存历史失败：{error}"),
+            }
         }
         Err(error) => eprintln!("从托盘打开文件夹失败：{error}"),
     }
