@@ -2,6 +2,27 @@
 
 All notable user-facing changes are recorded here. / 记录面向用户的重要变更。
 
+## [1.2.1] - 2026-11-13
+
+### Added / 新增
+
+- 支持在主界面直接切换简体中文与英文，并同步设置、快速启动浮窗、提示消息和托盘文案。 / Added a persisted Chinese/English language switch covering the main window, settings, quick-launch palette, notices, and tray labels.
+- 为 Codex、Claude Code、omp 和 opencode 增加可执行文件路径的自动检测、手动覆盖、存在性校验及恢复自动检测流程。 / Added executable detection, manual overrides, existence validation, and fallback-to-detection flows for Codex, Claude Code, omp, and opencode.
+
+### Changed / 变更
+
+- 设置页按外观、编辑器与 CLI、快捷键、行为、磁盘索引和数据重新组织，减少重复说明并区分真实状态与冲突错误。 / Reorganized settings into appearance, editor and CLI, shortcuts, behavior, disk index, and data groups, with less repeated copy and clearer status feedback.
+- 标题栏最小化改为进入任务栏；关闭按钮继续按“关闭时隐藏到系统托盘”设置处理。 / The title-bar minimize action now minimizes to the taskbar; close behavior continues to follow the close-to-tray setting.
+
+### Improved / 改进
+
+- 目录浏览先按名称排序再应用 500 项上限，磁盘索引查询使用 bounded top-k，导入路径合并使用集合去重。 / Directory browsing now sorts before applying the 500-item cap, disk-index queries use bounded top-k ranking, and import merging deduplicates normalized paths.
+- 历史记录裁剪保留收藏项，并修复重复或空记录 ID 的整理。 / History trimming preserves favorites and repairs duplicate or empty record IDs.
+
+### Fixed / 修复
+
+- 修复设置保存失败后前端状态可能与后端不一致的问题，并补充已知存储警告的双语展示。 / Fixed frontend state drift after settings-save failures and localized known storage warnings.
+
 ## [1.2.0] - 2026-11-12
 
 ### Added / 新增

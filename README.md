@@ -22,9 +22,11 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 - The quick-launch palette searches saved records and disk folders together, grouped by source
 - Pick VS Code, Codex, Claude Code, omp, opencode, or File Explorer directly from a palette row
 - Open folders with VS Code, VS Code Insiders, Cursor, Windsurf, or File Explorer
-- Launch Codex CLI or Claude Code in the selected folder; Claude Code supports a no-argument default mode and configurable permission modes
+- Launch Codex CLI, Claude Code, omp, or opencode in the selected folder; each CLI has configurable startup presets and an editable executable path
 - Add tags and colors; identify common project types
 - Stay in the system tray and use global shortcuts; both the main-window and quick-launch hotkeys are configurable, and clearing the quick-launch one disables it
+- Switch the interface between Chinese and English, including settings, quick launch, notices, and tray labels
+- Configure executable paths for Codex, Claude Code, omp, and opencode with detection, validation, and manual overrides
 - Row actions stay at six high-frequency buttons; favorite, rename, color, tags, copy path, reveal, and remove live in a right-click menu (`Shift+F10` works too)
 - The palette closes on `Esc`, when it loses focus, or after eight seconds without input
 - Import and export local JSON data; history is capped at 500 records while favorites are preserved
@@ -34,7 +36,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The latest release is **v1.2.0**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
+The latest release is **v1.2.1**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
 
 ## Installation
 
@@ -68,7 +70,7 @@ If a project is outside the default scan roots, add its parent directory in **Se
 
 Inside the palette only `↑` / `↓` and `Enter` are bound; switch the launch target with the icon buttons on the right of each row.
 
-The title-bar minimize button hides the app to the tray. The close button follows the **Minimize to tray on close** setting. To exit completely, right-click the tray icon and choose **Quit**.
+The title-bar minimize button minimizes the app to the taskbar. The close button follows the **Close to tray on close** setting. To exit completely, right-click the tray icon and choose **Quit**.
 
 ## Privacy and Data
 

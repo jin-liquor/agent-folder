@@ -29,6 +29,8 @@ Agent Folder 是一个面向 Windows 的轻量级桌面工具，用于管理常�
 - 浮窗在 `Esc`、失去焦点或 8 秒无操作后自动收起
 - 为项目添加标签和颜色，并识别常见项目类型
 - 使用系统托盘、全局快捷键和快速启动浮窗；两处快捷键都可在设置中修改，快速启动快捷键可清空禁用
+- 界面支持简体中文与英文，覆盖设置、快速启动、提示消息和托盘菜单
+- 支持自动检测并手动管理 Codex、Claude Code、omp 和 opencode 的可执行文件路径
 - 导入、导出本地 JSON 数据；每个用户最多保留 500 条历史记录，收藏不会因历史裁剪而删除
 - 存储安全：`data.json` 损坏时先备份再降级；备份本身失败时进入只读保护，不再静默覆盖原数据
 - 设置页分别显示各全局快捷键的注册状态并提供重试，快捷键冲突不再静默失败
@@ -36,7 +38,7 @@ Agent Folder 是一个面向 Windows 的轻量级桌面工具，用于管理常�
 
 ## 当前版本
 
-最新版本为 **v1.2.0**，请从 [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases) 下载。
+最新版本为 **v1.2.1**，请从 [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases) 下载。
 
 ## 安装
 
