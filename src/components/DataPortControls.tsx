@@ -39,7 +39,7 @@ export default function DataPortControls({ onImported, onToast, language }: Prop
       const count = await commands.exportData(path);
       onToast(text(`已导出 ${count} 条记录`, `Exported ${count} records`));
     } catch (error) {
-      onToast(text(`导出失败：${errorText(error)}`, `Export failed: ${errorText(error)}`));
+      onToast(text(`导出失败：${errorText(error, language)}`, `Export failed: ${errorText(error, language)}`));
     } finally {
       setBusy(null);
     }
@@ -61,7 +61,7 @@ export default function DataPortControls({ onImported, onToast, language }: Prop
       }
       onToast(text(`导入完成：${parts.join("，")}`, `Import complete: ${parts.join(", ")}`));
     } catch (error) {
-      onToast(text(`导入失败：${errorText(error)}`, `Import failed: ${errorText(error)}`));
+      onToast(text(`导入失败：${errorText(error, language)}`, `Import failed: ${errorText(error, language)}`));
     } finally {
       setBusy(null);
     }

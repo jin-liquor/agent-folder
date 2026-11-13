@@ -36,7 +36,7 @@ export default function DirectoryTree({ onPick, language }: Props) {
     void commands
       .listDrives()
       .then(setDrives)
-      .catch((err: unknown) => setRootError(errorText(err)));
+      .catch((err: unknown) => setRootError(errorText(err, language)));
   }, []);
 
   const toggle = useCallback(
@@ -66,7 +66,7 @@ export default function DirectoryTree({ onPick, language }: Props) {
       } catch (err) {
         setNodes((prev) => ({
           ...prev,
-          [path]: { loading: false, error: errorText(err), children: null },
+          [path]: { loading: false, error: errorText(err, language), children: null },
         }));
       }
     },

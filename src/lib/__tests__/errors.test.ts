@@ -55,4 +55,31 @@ describe("errorText", () => {
     // 未知错误仍然保留，便于排查；只是已知类型才被改写。
     expect(errorText("some unexpected failure xyz")).toBe("some unexpected failure xyz");
   });
+
+  it("uses English wording when the interface is English", () => {
+    // 英文界面里混进一整句中文是明显的漏译。
+    expect(errorText("文件格式不正确：expected value at line 1 column 16", "en-US")).toBe(
+      "The file is not valid JSON and may be corrupted",
+    );
+    expect(errorText("写入数据失败：拒绝访问。 (os error 5)", "en-US")).toBe(
+      "Access denied; check whether the file or folder is in use",
+    );
+    expect(errorText("The system cannot find the path specified. (os error 3)", "en-US")).toBe(
+      "The path no longer exists; it may have been moved or deleted",
+    );
+    expect(errorText("being used by another process. (os error 32)", "en-US")).toBe(
+      "The file is in use by another program; please try again later",
+    );
+  });
+
+  it("falls back to English for empty input", () => {
+    expect(errorText("", "en-US")).toBe("Unknown error");
+    expect(errorText(null, "en-US")).toBe("Unknown error");
+    expect(errorText(undefined, "en-US")).toBe("Unknown error");
+  });
+
+  it("keeps business messages untouched in English mode", () => {
+    // 后端返回的业务文案原样透出，不做翻译。
+    expect(errorText("记录不存在", "en-US")).toBe("记录不存在");
+  });
 });

@@ -184,7 +184,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   renameFolder: async (id, name) => {
     const trimmed = name.trim();
-    if (!trimmed) throw new Error("名称不能为空");
+    if (!trimmed) {
+      throw new Error(
+        get().settings.language === "en-US" ? "Name cannot be empty" : "名称不能为空",
+      );
+    }
     const updated = await commands.renameFolder(id, trimmed);
     set({ folders: get().folders.map((f) => (f.id === id ? updated : f)) });
     return updated;

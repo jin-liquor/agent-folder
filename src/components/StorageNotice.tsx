@@ -43,7 +43,7 @@ export default function StorageNotice({ status, onChanged, language }: Props) {
     try {
       await action();
     } catch (error: unknown) {
-      window.alert(`${label}${text("失败", " failed")}: ${errorText(error)}`);
+      window.alert(`${label}${text("失败", " failed")}: ${errorText(error, language)}`);
     } finally {
       setBusy(null);
     }

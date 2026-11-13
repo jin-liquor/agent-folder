@@ -1,18 +1,34 @@
 /**
  * 路径与时间字符串工具。
  */
+import type { Language } from "./i18n";
 
-/** 把时间戳转成「几分钟前」这类相对描述。 */
-export function timeAgo(ts: number): string {
-  if (!ts) return "从未打开";
+/**
+ * 把时间戳转成「几分钟前」这类相对描述。
+ *
+ * 界面支持中英双语，描述也要跟着界面语言走：英文界面里混进
+ * 「刚刚」「从未打开」这类中文是明显的漏译。
+ */
+export function timeAgo(ts: number, language: Language = "zh-CN"): string {
+  const english = language === "en-US";
+  if (!ts) return english ? "Never opened" : "从未打开";
   const diff = Date.now() - ts;
   const minute = 60_000;
   const hour = 3_600_000;
   const day = 86_400_000;
-  if (diff < minute) return "刚刚";
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`;
-  if (diff < day) return `${Math.floor(diff / hour)} 小时前`;
-  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`;
+  if (diff < minute) return english ? "just now" : "刚刚";
+  if (diff < hour) {
+    const value = Math.floor(diff / minute);
+    return english ? `${value} min ago` : `${value} 分钟前`;
+  }
+  if (diff < day) {
+    const value = Math.floor(diff / hour);
+    return english ? `${value} h ago` : `${value} 小时前`;
+  }
+  if (diff < 7 * day) {
+    const value = Math.floor(diff / day);
+    return english ? `${value} d ago` : `${value} 天前`;
+  }
   const d = new Date(ts);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate(),

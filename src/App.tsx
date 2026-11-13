@@ -145,7 +145,7 @@ export default function App() {
         if (settings.hideAfterOpen) void system.hideWindow();
         setQuery("");
       } catch (error: unknown) {
-        toast.show(text(`打开失败：${errorText(error)}`, `Open failed: ${errorText(error)}`));
+        toast.show(text(`打开失败：${errorText(error, settings.language)}`, `Open failed: ${errorText(error, settings.language)}`));
       }
     },
     [openPath, settings.hideAfterOpen, text, toast],
@@ -168,7 +168,12 @@ export default function App() {
         if (settings.hideAfterOpen) void system.hideWindow();
         setQuery("");
       } catch (error: unknown) {
-        toast.show(`VS Code 打开失败：${errorText(error)}`);
+        toast.show(
+          text(
+            `VS Code 打开失败：${errorText(error, settings.language)}`,
+            `VS Code open failed: ${errorText(error, settings.language)}`,
+          ),
+        );
       }
     },
     [settings.hideAfterOpen, text, toast],
@@ -189,7 +194,7 @@ export default function App() {
         if (settings.hideAfterOpen) void system.hideWindow();
         setQuery("");
       } catch (error: unknown) {
-        toast.show(text(`打开失败：${errorText(error)}`, `Open failed: ${errorText(error)}`));
+        toast.show(text(`打开失败：${errorText(error, settings.language)}`, `Open failed: ${errorText(error, settings.language)}`));
       }
     },
     [openPath, settings.hideAfterOpen, text, toast],
@@ -205,7 +210,7 @@ export default function App() {
       } catch (error: unknown) {
         // 失败时不能顺手隐藏窗口，否则提示跟着窗口一起消失，
         // 用户看到的就是「点了没反应」。
-        toast.show(text(`启动${name}失败：${errorText(error)}`, `Failed to launch ${name}: ${errorText(error)}`));
+        toast.show(text(`启动${name}失败：${errorText(error, settings.language)}`, `Failed to launch ${name}: ${errorText(error, settings.language)}`));
       }
     },
     [settings.hideAfterOpen, text, toast],
@@ -217,7 +222,7 @@ export default function App() {
         await removeFolder(record.id);
         toast.show(text(`已移除「${record.name}」`, `Removed “${record.name}”`));
       } catch (error: unknown) {
-        toast.show(text(`移除失败：${errorText(error)}`, `Remove failed: ${errorText(error)}`));
+        toast.show(text(`移除失败：${errorText(error, settings.language)}`, `Remove failed: ${errorText(error, settings.language)}`));
       }
     },
     [removeFolder, text, toast],
@@ -229,7 +234,7 @@ export default function App() {
         await toggleFavorite(record.id);
         toast.show(text(record.favorite ? "已取消收藏" : "已收藏", record.favorite ? "Removed from favorites" : "Added to favorites"));
       } catch (error: unknown) {
-        toast.show(text(`收藏状态更新失败：${errorText(error)}`, `Favorite update failed: ${errorText(error)}`));
+        toast.show(text(`收藏状态更新失败：${errorText(error, settings.language)}`, `Favorite update failed: ${errorText(error, settings.language)}`));
       }
     },
     [toggleFavorite, text, toast],
@@ -242,7 +247,7 @@ export default function App() {
         const record = await addFolder(path);
         if (record) toast.show(text(`已添加「${record.name}」`, `Added “${record.name}”`));
       } catch (error: unknown) {
-        toast.show(text(`添加失败：${errorText(error)}`, `Add failed: ${errorText(error)}`));
+        toast.show(text(`添加失败：${errorText(error, settings.language)}`, `Add failed: ${errorText(error, settings.language)}`));
       }
     },
     [addFolder, text, toast],
@@ -257,7 +262,7 @@ export default function App() {
         setAddOpen(false);
       }
     } catch (error: unknown) {
-      toast.show(text(`添加失败：${errorText(error)}`, `Add failed: ${errorText(error)}`));
+      toast.show(text(`添加失败：${errorText(error, settings.language)}`, `Add failed: ${errorText(error, settings.language)}`));
     }
   }, [addFolder, toast]);
 
@@ -267,7 +272,7 @@ export default function App() {
         await renameFolder(record.id, name);
         toast.show(text(`已重命名为「${name}」`, `Renamed to “${name}”`));
       } catch (error: unknown) {
-        toast.show(text(`重命名失败：${errorText(error)}`, `Rename failed: ${errorText(error)}`));
+        toast.show(text(`重命名失败：${errorText(error, settings.language)}`, `Rename failed: ${errorText(error, settings.language)}`));
       }
     },
     [renameFolder, text, toast],
@@ -278,7 +283,7 @@ export default function App() {
       try {
         await setFolderColor(record.id, color);
       } catch (error: unknown) {
-        toast.show(text(`标记颜色失败：${errorText(error)}`, `Color update failed: ${errorText(error)}`));
+        toast.show(text(`标记颜色失败：${errorText(error, settings.language)}`, `Color update failed: ${errorText(error, settings.language)}`));
       }
     },
     [setFolderColor, text, toast],
@@ -294,7 +299,7 @@ export default function App() {
             : text("已清除标签", "Cleared tags"),
         );
       } catch (error: unknown) {
-        toast.show(text(`更新标签失败：${errorText(error)}`, `Tag update failed: ${errorText(error)}`));
+        toast.show(text(`更新标签失败：${errorText(error, settings.language)}`, `Tag update failed: ${errorText(error, settings.language)}`));
       }
     },
     [setFolderTags, text, toast],
@@ -374,13 +379,13 @@ export default function App() {
           onReveal={() =>
             void revealInExplorer(row.record.path)
               .then(() => toast.show(text("已在资源管理器中显示", "Shown in File Explorer")))
-              .catch((error: unknown) => toast.show(text(`定位失败：${errorText(error)}`, `Reveal failed: ${errorText(error)}`)))
+              .catch((error: unknown) => toast.show(text(`定位失败：${errorText(error, settings.language)}`, `Reveal failed: ${errorText(error, settings.language)}`)))
           }
           onCopy={() =>
             void system
               .copyText(row.record.path)
               .then(() => toast.show(text("已复制路径", "Path copied")))
-              .catch((error: unknown) => toast.show(text(`复制失败：${errorText(error)}`, `Copy failed: ${errorText(error)}`)))
+              .catch((error: unknown) => toast.show(text(`复制失败：${errorText(error, settings.language)}`, `Copy failed: ${errorText(error, settings.language)}`)))
           }
           onRemove={() => void handleRemove(row.record)}
           onRename={(name) => void handleRename(row.record, name)}
@@ -397,6 +402,7 @@ export default function App() {
         path={row.hit.path}
         name={row.hit.name}
         selected={index === selected}
+        language={settings.language}
         highlight={highlight}
         onOpen={() => void openScanPath(row.hit.path)}
       />
@@ -414,7 +420,7 @@ export default function App() {
           <button
             onClick={() => {
               setLoadError(null);
-              void load().catch((error: unknown) => setLoadError(errorText(error)));
+              void load().catch((error: unknown) => setLoadError(errorText(error, settings.language)));
             }}
             className="rounded-lg border border-[var(--glass-border)] px-3 py-1.5 text-[12px] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
@@ -516,7 +522,7 @@ export default function App() {
               onClick={() => {
                 void purgeMissing()
                   .then((n) => toast.show(text(`已清理 ${n} 条失效记录`, `Removed ${n} missing records`)))
-                  .catch((error: unknown) => toast.show(text(`清理失败：${errorText(error)}`, `Cleanup failed: ${errorText(error)}`)));
+                  .catch((error: unknown) => toast.show(text(`清理失败：${errorText(error, settings.language)}`, `Cleanup failed: ${errorText(error, settings.language)}`)));
               }}
               className="flex items-center gap-1 rounded-md border border-[var(--danger)]/40 px-2 py-1 text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
             >
@@ -532,7 +538,7 @@ export default function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onImported={() => {
-          void load().catch((error: unknown) => toast.show(text(`刷新失败：${errorText(error)}`, `Refresh failed: ${errorText(error)}`)));
+          void load().catch((error: unknown) => toast.show(text(`刷新失败：${errorText(error, settings.language)}`, `Refresh failed: ${errorText(error, settings.language)}`)));
         }}
         onToast={toast.show}
       />

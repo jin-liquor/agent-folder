@@ -73,6 +73,13 @@ export type OmpLaunchStyle = "direct" | "powershell";
 export interface CliPreset {
   id: string;
   name: string;
+  /**
+   * 英文界面显示的名字。
+   *
+   * 只有内置预设提供——它们是代码里写死的，不进 `data.json`；
+   * 用户自建预设只有一种语言的名字，留空即可。
+   */
+  nameEn?: string;
   /** 参数串，语法见 Rust `services::cli_args::split_args`。 */
   args: string;
   builtin: boolean;
@@ -192,37 +199,52 @@ export const EMPTY_CLI_PRESETS: CliPresets = {
  */
 export const BUILTIN_PRESETS: Record<CliAgentId, CliPreset[]> = {
   codex: [
-    { id: "default", name: "默认", args: "", builtin: true },
+    { id: "default", name: "默认", nameEn: "Default", args: "", builtin: true },
     {
       id: "danger-full-access",
       name: "danger-full-access（高风险）",
+      nameEn: "danger-full-access (high risk)",
       args: "--sandbox danger-full-access",
       builtin: true,
     },
-    { id: "yolo", name: "yolo（高风险）", args: "--yolo", builtin: true },
+    { id: "yolo", name: "yolo（高风险）", nameEn: "yolo (high risk)", args: "--yolo", builtin: true },
   ],
   claude: [
-    { id: "default", name: "默认", args: "", builtin: true },
+    { id: "default", name: "默认", nameEn: "Default", args: "", builtin: true },
     {
       id: "acceptEdits",
       name: "acceptEdits",
+      nameEn: "acceptEdits",
       args: "--permission-mode acceptEdits",
       builtin: true,
     },
     {
       id: "dangerously-skip-permissions",
       name: "跳过权限确认（高风险）",
+      nameEn: "Skip permission prompts (high risk)",
       args: "--dangerously-skip-permissions",
       builtin: true,
     },
   ],
   omp: [
-    { id: "default", name: "默认", args: "", builtin: true },
-    { id: "yolo", name: "yolo（自动批准）", args: "--auto-approve", builtin: true },
+    { id: "default", name: "默认", nameEn: "Default", args: "", builtin: true },
+    {
+      id: "yolo",
+      name: "yolo（自动批准）",
+      nameEn: "yolo (auto-approve)",
+      args: "--auto-approve",
+      builtin: true,
+    },
   ],
   opencode: [
-    { id: "default", name: "默认", args: "", builtin: true },
-    { id: "auto", name: "auto（自动批准）", args: "--auto", builtin: true },
+    { id: "default", name: "默认", nameEn: "Default", args: "", builtin: true },
+    {
+      id: "auto",
+      name: "auto（自动批准）",
+      nameEn: "auto (auto-approve)",
+      args: "--auto",
+      builtin: true,
+    },
   ],
 };
 

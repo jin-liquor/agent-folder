@@ -293,7 +293,7 @@ export default function FolderItem({
       </div>
 
       <span className="w-[72px] shrink-0 text-right text-[11px] text-[var(--text-secondary)] opacity-70">
-        {timeAgo(record.lastOpenedAt)}
+        {timeAgo(record.lastOpenedAt, language)}
       </span>
 
       <div className="flex shrink-0 items-center gap-0.5">

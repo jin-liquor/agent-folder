@@ -35,6 +35,16 @@ export function nextPresetId(existing: CliPreset[]): string {
   return `user-${n}`;
 }
 
+/**
+ * 预设在当前界面语言下显示的名字。
+ *
+ * 内置预设在代码里写死了中文名，英文界面必须用 `nameEn`，
+ * 否则下拉栏里会露出「默认」「高风险」这类中文。
+ */
+export function presetLabel(preset: CliPreset, language: Language): string {
+  return language === "en-US" && preset.nameEn ? preset.nameEn : preset.name;
+}
+
 export default function CliPresetEditor({
   agent,
   builtins,
@@ -101,7 +111,7 @@ export default function CliPresetEditor({
               value={preset.id}
               className="bg-[var(--glass-solid)] text-[var(--text-primary)]"
             >
-              {preset.name}
+              {presetLabel(preset, language)}
             </option>
           ))}
         </select>
