@@ -90,6 +90,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(windows)]
     fn drives_are_listed() {
         let drives = list_drives();
         assert!(!drives.is_empty(), "至少应有一个可用磁盘");
