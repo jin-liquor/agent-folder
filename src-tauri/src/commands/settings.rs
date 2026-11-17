@@ -204,10 +204,18 @@ pub fn save_settings(
     }
 
     // 第三步：写入并落盘，全程持锁，失败时在同一把锁内回滚。
-    {
+    let index_changed = {
         let mut data = state.data();
         // 锁内重新读取，避免使用上面那份可能已过期的快照做回滚。
         let rollback = data.settings.clone();
+        // 索引的「范围」变了才需要立刻重建：开关扫描或换扫描根目录。
+        // 这里用**锁内旧值**判断，与本次实际落盘的那次写入同源，
+        // 不使用函数早期那份可能已被并发保存改写的快照。
+        //
+        // 自动索引的开关与间隔不在这里处理：后台循环每轮都现读设置，
+        // 只调开关不该凭空触发一次整盘扫描。
+        let index_changed = settings.scan_enabled != rollback.scan_enabled
+            || settings.search_roots != rollback.search_roots;
         data.settings = settings.clone();
 
         if let Err(error) = state.save_locked(&data) {
@@ -218,10 +226,19 @@ pub fn save_settings(
             }
             return Err(error);
         }
-    }
+        index_changed
+    };
 
     // 托盘菜单里不含设置内容，但最近列表可能与磁盘状态不同步，
     // 这里刷新一次成本极低，可保持两者一致。
     tray::rebuild_menu(&app);
+
+    // 索引设置变了就立刻同步一次：`spawn_index_build` 在关闭扫描或根目录
+    // 为空时会调用 `disable()` 停用索引，所以「关闭」也走同一条路径，
+    // 界面上不必等下一个自动刷新周期。
+    if index_changed {
+        super::search::spawn_index_build(app.clone(), true);
+    }
+
     Ok(settings)
 }

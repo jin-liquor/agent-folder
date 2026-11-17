@@ -60,7 +60,12 @@ export const listSubdirs = (path: string) => invoke<DirEntry[]>("list_subdirs", 
 // -------------------------------------------------------------------- 启动器
 export const openInEditor = (path: string, editor?: string) =>
   invoke<OpenResult>("open_in_editor", { path, editor: editor ?? null });
-export const revealInExplorer = (path: string) => invoke<void>("reveal_in_explorer", { path });
+/**
+ * 在文件资源管理器中打开：目录直接进入，文件则在父目录中选中。
+ *
+ * 与「用默认编辑器打开」的区别只是目标程序不同，历史记录仍由 `open_in_editor` 负责。
+ */
+export const openInExplorer = (path: string) => invoke<void>("open_in_explorer", { path });
 export const detectEditors = () => invoke<EditorInfo[]>("detect_editors");
 /** 探测 Codex / Claude / omp / opencode 是否可用，用于浮窗图标禁用态。 */
 export const detectCliAgents = () => invoke<CliAgentStatus>("detect_cli_agents");

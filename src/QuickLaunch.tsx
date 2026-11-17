@@ -16,9 +16,9 @@ import { excludeKnownPaths, folderPathSet } from "./lib/disk";
 import { projectStyle } from "./lib/project";
 import { useDiskIndex } from "./hooks/useDiskIndex";
 import { useAppStore } from "./stores/useAppStore";
-import { openCliAgent, openInEditor, revealInExplorer } from "./lib/commands";
+import { openCliAgent, openInEditor, openInExplorer } from "./lib/commands";
 import OpenWithBar from "./components/OpenWithBar";
-import type { FolderRecord, QuickEnterAction, SearchHit } from "./lib/types";
+import { EXPLORER_EDITOR_ID, type FolderRecord, type QuickEnterAction, type SearchHit } from "./lib/types";
 import { SearchIcon } from "./components/Icons";
 
 const quickWindow = () => getCurrentWindow();
@@ -44,6 +44,7 @@ function enterLabel(action: QuickEnterAction, english: boolean): string {
     return {
       defaultEditor: "Open",
       vscode: "Open in VS Code",
+      explorer: "Open in Explorer",
       codex: "Launch Codex",
       claude: "Launch Claude",
       omp: "Launch omp",
@@ -53,6 +54,7 @@ function enterLabel(action: QuickEnterAction, english: boolean): string {
   return {
     defaultEditor: "打开",
     vscode: "VS Code 打开",
+    explorer: "资源管理器打开",
     codex: "启动 Codex",
     claude: "启动 Claude",
     omp: "启动 omp",
@@ -192,7 +194,11 @@ export default function QuickLaunch() {
           await openCliAgent(path, action, true);
         } else {
           const result =
-            action === "vscode" ? await openInEditor(path, "vscode") : await openPath(path);
+            action === "vscode"
+              ? await openInEditor(path, "vscode")
+              : action === "explorer"
+                ? await openInEditor(path, EXPLORER_EDITOR_ID)
+                : await openPath(path);
           if (!result.historySaved) {
             setError(
               settings.language === "en-US"
@@ -373,7 +379,7 @@ export default function QuickLaunch() {
                       onOmp={() => void perform(row, "omp")}
                       onOpencode={() => void perform(row, "opencode")}
                       onReveal={() =>
-                        void revealInExplorer(path).catch((err: unknown) =>
+                        void openInExplorer(path).catch((err: unknown) =>
                           setError(errorText(err, settings.language)),
                         )
                       }

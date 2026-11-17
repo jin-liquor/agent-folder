@@ -44,7 +44,7 @@ macro_rules! app_commands {
             $crate::commands::check_missing_folders,
             $crate::commands::remove_missing_folders,
             $crate::commands::open_in_editor,
-            $crate::commands::reveal_in_explorer,
+            $crate::commands::open_in_explorer,
             $crate::commands::detect_editors,
             $crate::commands::detect_cli_agents,
             $crate::commands::open_cli_agent,

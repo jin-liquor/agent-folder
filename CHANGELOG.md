@@ -2,6 +2,31 @@
 
 All notable user-facing changes are recorded here. / 记录面向用户的重要变更。
 
+## [1.3.0] - 2026-11-17
+
+### Added / 新增
+
+- 设置改为主窗口内的独立页面，同窗口内跳转、不新开窗口；左侧目录可点击跳转并跟随滚动高亮，目录项与设置项的说明改为鼠标悬停显示，不再在每项下方堆说明文字。 / Settings is now a full page inside the main window instead of a side drawer, with a left-hand section list that jumps and tracks scrolling; explanations moved from permanent captions into hover tooltips.
+- 默认编辑器新增「文件资源管理器」：打开文件夹会直接进入该目录。 / File Explorer is now a selectable default editor that opens the folder itself.
+- 磁盘索引支持定时自动重建，间隔可选 15 分钟 / 30 分钟 / 1 小时 / 2 小时 / 6 小时 / 24 小时（默认 30 分钟），可单独关闭。 / Added scheduled disk indexing with a configurable interval from 15 minutes to 24 hours (default 30 minutes) and its own switch.
+- 快速启动浮窗的 Enter 默认动作新增「文件资源管理器」。 / The quick-launch Enter action list now includes File Explorer.
+
+### Changed / 变更
+
+- 文件资源管理器入口的语义从「在父目录中选中」改为「打开该目录并进入」；传入文件时仍在父目录中选中它（例如设置里的「定位备份」）。 / File Explorer actions now open the directory itself; when given a file they still select it in its parent directory, as with Locate backup.
+- 设置分组重新排列：CLI 启动模式移入「CLI」组，编辑器可执行文件路径移回「编辑器」组，快捷键速查并入「快捷键」组。 / Reorganized settings groups: CLI launch modes now live under CLI, the editor executable path under Editor, and the shortcut reference under Shortcuts.
+- 设置页在聚焦到某个分区时会把该分区滚动到可视区顶部，滚动容器与目录高亮共用同一份偏移计算，点击结果与滚动结果不会不一致。 / Section jumps and scroll highlighting share one offset calculation, so clicking a section and scrolling to it always agree.
+
+### Improved / 改进
+
+- 自动索引以「上次尝试时间」而不是「上次成功时间」判断间隔：构建失败时不会每轮都重试，避免把磁盘打满；开关扫描或修改扫描范围会立即重建索引，只调整自动索引开关或间隔则不会凭空触发一次整盘扫描。 / Auto indexing schedules from the last attempt rather than the last successful build, so a failing build is not retried every tick; toggling disk search or changing scan roots rebuilds immediately, while changing only the auto-index switch or interval does not.
+- 数据文件新增 `indexAutoRefresh` 与 `indexRefreshMinutes` 两个字段；旧数据缺少时按默认值补齐，无需手动迁移。 / The data file gains `indexAutoRefresh` and `indexRefreshMinutes`; older files fall back to defaults without manual migration.
+- 索引间隔同时在前端归一化，非法值（0、未列出的分钟数）一律回落到 30 分钟，下拉框不会出现空白项。 / Interval values are normalized on the frontend too, so out-of-range values fall back to 30 minutes and the selector never goes blank.
+
+### Breaking / 破坏性变更
+
+- Tauri 命令 `reveal_in_explorer` 更名为 `open_in_explorer`；前后端必须同版本更新，旧前端调用会得到「命令不存在」。 / The Tauri command `reveal_in_explorer` was renamed to `open_in_explorer`; frontend and backend must ship together.
+
 ## [1.2.3] - 2026-11-13
 
 ### Fixed / 修复

@@ -6,78 +6,21 @@
  */
 import { create } from "zustand";
 import * as commands from "../lib/commands";
-import { normalizeLanguage } from "../lib/i18n";
 import * as system from "../lib/system";
 import {
-  BUILTIN_PRESETS,
-  DEFAULT_QUICK_HOTKEY,
   DEFAULT_SETTINGS,
-  EMPTY_CLI_PATHS,
-  EMPTY_CLI_PRESETS,
-  LEGACY_QUICK_HOTKEYS,
   type AppSettings,
   type CliAgentId,
   type CliAgentStatus,
-  type CliPreset,
   type CliPaths,
   type EditorInfo,
   type FolderRecord,
   type StorageStatus,
 } from "../lib/types";
+import { normalizeSettings } from "../lib/settings";
 
-/** 各 CLI 允许的启动模式；新增模式时必须同步 Rust 的 `*_MODES` 常量。 */
-const OMP_LAUNCH_STYLES: readonly string[] = ["direct", "powershell"];
-const QUICK_ACTIONS: readonly string[] = [
-  "defaultEditor",
-  "vscode",
-  "codex",
-  "claude",
-  "omp",
-  "opencode",
-];
-
-/** 某个 CLI 的全部预设（内置 + 用户自建）。 */
-export function presetsOf(settings: AppSettings, agent: CliAgentId): CliPreset[] {
-  return [...BUILTIN_PRESETS[agent], ...(settings.cliPresets?.[agent] ?? [])];
-}
-
-/** 校验选中的预设 id 是否存在；不存在时回落到 `default`。 */
-function validMode(settings: AppSettings, agent: CliAgentId, value: string): string {
-  const found = presetsOf(settings, agent).some((preset) => preset.id === value);
-  return found ? value : "default";
-}
-
-/** 从后端读到的设置补齐缺失字段，并纠正越界的预设与开关值。 */
-export function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
-  const merged: AppSettings = {
-    ...DEFAULT_SETTINGS,
-    ...settings,
-    cliPaths: { ...EMPTY_CLI_PATHS, ...(settings.cliPaths ?? {}) },
-    cliPresets: {
-      ...EMPTY_CLI_PRESETS,
-      ...(settings.cliPresets ?? {}),
-    },
-  };
-
-  return {
-    ...merged,
-    language: normalizeLanguage(merged.language),
-    // 旧默认值一次性升级；用户改过的组合与主动禁用保持原样。
-    quickHotkey: LEGACY_QUICK_HOTKEYS.includes(merged.quickHotkey)
-      ? DEFAULT_QUICK_HOTKEY
-      : merged.quickHotkey,
-    codexMode: validMode(merged, "codex", merged.codexMode),
-    claudeMode: validMode(merged, "claude", merged.claudeMode),
-    ompMode: validMode(merged, "omp", merged.ompMode),
-    opencodeMode: validMode(merged, "opencode", merged.opencodeMode),
-    ompLaunchStyle: (OMP_LAUNCH_STYLES.includes(merged.ompLaunchStyle)
-      ? merged.ompLaunchStyle
-      : DEFAULT_SETTINGS.ompLaunchStyle) as AppSettings["ompLaunchStyle"],
-    quickEnterAction: (QUICK_ACTIONS.includes(merged.quickEnterAction)
-      ? merged.quickEnterAction
-      : DEFAULT_SETTINGS.quickEnterAction) as AppSettings["quickEnterAction"],
-  };
-}
+// 既有调用方从 store 里取归一化函数，这里保留同名导出。
+export { normalizeSettings, presetsOf } from "../lib/settings";
 
 let settingsWrite: Promise<void> = Promise.resolve();
 

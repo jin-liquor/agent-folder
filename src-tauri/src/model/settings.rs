@@ -261,6 +261,10 @@ pub struct AppSettings {
     pub quick_open_with: bool,
     /// 快速启动浮窗的全局快捷键；空串表示用户主动禁用。
     pub quick_hotkey: String,
+    /// 是否按固定间隔自动重建磁盘索引。
+    pub index_auto_refresh: bool,
+    /// 自动重建的间隔（分钟），取值限于 `INDEX_REFRESH_MINUTES`。
+    pub index_refresh_minutes: u32,
 }
 
 /// 快速启动快捷键的默认值。
@@ -285,6 +289,11 @@ pub const QUICK_ACTIONS: [&str; 6] = [
 ];
 /// 合法的 omp 启动方式。
 pub const OMP_LAUNCH_STYLES: [&str; 2] = ["direct", "powershell"];
+
+/// 自动索引可选的间隔（分钟）：15 分钟 / 30 分钟 / 1 小时 / 2 小时 / 6 小时 / 24 小时。
+pub const INDEX_REFRESH_MINUTES: [u32; 6] = [15, 30, 60, 120, 360, 1440];
+/// 默认自动索引间隔（分钟）。
+pub const DEFAULT_INDEX_REFRESH_MINUTES: u32 = 30;
 
 impl AppSettings {
     /// 某个 CLI 当前选中的预设 id。
@@ -372,6 +381,13 @@ impl AppSettings {
             "defaultEditor",
         );
         changed |= reset_if_invalid(&mut self.omp_launch_style, &OMP_LAUNCH_STYLES, "direct");
+
+        // 自动索引间隔只接受白名单里的值：0、7 这类越界值（含 0）一律回到默认值，
+        // 否则间隔会退化成「每轮都重建」或出现界面上不存在的选项。
+        if !INDEX_REFRESH_MINUTES.contains(&self.index_refresh_minutes) {
+            self.index_refresh_minutes = DEFAULT_INDEX_REFRESH_MINUTES;
+            changed = true;
+        }
 
         // 快捷键不能为空：空串会让注册必然失败，界面还会显示成「未注册」。
         if self.global_hotkey.trim().is_empty() {
@@ -488,13 +504,18 @@ impl Default for AppSettings {
             quick_enter_action: "defaultEditor".into(),
             quick_open_with: true,
             quick_hotkey: DEFAULT_QUICK_HOTKEY.into(),
+            index_auto_refresh: true,
+            index_refresh_minutes: DEFAULT_INDEX_REFRESH_MINUTES,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_presets, AppSettings, CliPaths, CliPreset, DEFAULT_QUICK_HOTKEY};
+    use super::{
+        builtin_presets, AppSettings, CliPaths, CliPreset, DEFAULT_INDEX_REFRESH_MINUTES,
+        DEFAULT_QUICK_HOTKEY,
+    };
     use crate::services::cli_probe::CliAgent;
 
     #[test]
@@ -723,6 +744,54 @@ mod tests {
         let mut missing = CliPaths::default();
         missing.set(CliAgent::Codex, String::new());
         assert!(!missing.has_stale_entry());
+    }
+
+    #[test]
+    fn index_auto_refresh_defaults_to_enabled() {
+        let settings = AppSettings::default();
+        assert!(settings.index_auto_refresh, "自动索引默认开启");
+        assert_eq!(
+            settings.index_refresh_minutes,
+            DEFAULT_INDEX_REFRESH_MINUTES
+        );
+
+        // 旧数据缺少新字段时走 serde 默认值，不要求迁移。
+        let legacy: AppSettings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(legacy.index_auto_refresh, "旧数据应默认开启自动索引");
+        assert_eq!(legacy.index_refresh_minutes, DEFAULT_INDEX_REFRESH_MINUTES);
+    }
+
+    #[test]
+    fn user_can_disable_index_auto_refresh() {
+        let mut settings: AppSettings =
+            serde_json::from_str(r#"{"indexAutoRefresh":false}"#).unwrap();
+        assert!(!settings.normalize(), "布尔值无需归一化");
+        assert!(!settings.index_auto_refresh);
+    }
+
+    #[test]
+    fn invalid_index_refresh_minutes_fall_back_to_default() {
+        // 0 也属于非法值：会导致「每轮都重建」。
+        for minutes in [0, 7, 45, 2880] {
+            let json = format!(r#"{{"indexRefreshMinutes":{minutes}}}"#);
+            let mut settings: AppSettings = serde_json::from_str(&json).unwrap();
+            assert!(settings.normalize(), "{minutes} 应被判定为非法间隔");
+            assert_eq!(
+                settings.index_refresh_minutes, DEFAULT_INDEX_REFRESH_MINUTES,
+                "{minutes} 应归一化成默认间隔"
+            );
+            assert!(!settings.normalize(), "重复归一化不应再报告改动");
+        }
+    }
+
+    #[test]
+    fn valid_index_refresh_minutes_are_kept() {
+        for minutes in [15, 1440] {
+            let json = format!(r#"{{"indexRefreshMinutes":{minutes}}}"#);
+            let mut settings: AppSettings = serde_json::from_str(&json).unwrap();
+            assert!(!settings.normalize(), "{minutes} 是合法间隔，不应被改动");
+            assert_eq!(settings.index_refresh_minutes, minutes);
+        }
     }
 }
 

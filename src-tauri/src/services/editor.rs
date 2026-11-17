@@ -25,6 +25,9 @@ pub struct EditorInfo {
     pub command: Option<String>,
 }
 
+/// 「用文件资源管理器打开」的伪编辑器 id，不需要探测可执行文件。
+pub const EXPLORER_EDITOR_ID: &str = "explorer";
+
 /// 交互式 CLI 工具的可用性，用于快速启动浮窗的图标禁用态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,7 +116,7 @@ fn find_code_in_path() -> Option<String> {
 
 /// 探测本机已安装的编辑器。
 pub fn detect_editors() -> Vec<EditorInfo> {
-    editor_candidates()
+    let mut list: Vec<EditorInfo> = editor_candidates()
         .into_iter()
         .map(|(id, name, paths)| {
             let command = paths
@@ -127,7 +130,17 @@ pub fn detect_editors() -> Vec<EditorInfo> {
                 command,
             }
         })
-        .collect()
+        .collect();
+
+    // 资源管理器不需要探测可执行文件，始终可用，因此追加在末尾。
+    // `name` 只作兜底：前端会按 id 本地化。
+    list.push(EditorInfo {
+        id: EXPLORER_EDITOR_ID.to_string(),
+        name: "File Explorer".to_string(),
+        available: true,
+        command: None,
+    });
+    list
 }
 
 /// 解析最终要使用的可执行文件：用户指定的路径优先，其次按 id 探测。
@@ -394,6 +407,12 @@ pub fn open_folder(
         return Err(format!("文件夹不存在: {folder}"));
     }
 
+    // 资源管理器不是可执行文件编辑器：不走 resolve_editor，也不需要信任参数。
+    if editor_id == EXPLORER_EDITOR_ID {
+        open_in_explorer(folder)?;
+        return Ok(EXPLORER_EDITOR_ID.to_string());
+    }
+
     let Some(command) = resolve_editor(editor_id, override_path) else {
         // 没找到可执行文件时，仅在「信任工作区未被要求关闭」的前提下
         // 退化到 URI 协议，否则无法保证 --disable-workspace-trust 生效。
@@ -435,13 +454,47 @@ fn open_uri(uri: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// 在资源管理器中选中该文件夹。
-pub fn reveal_in_explorer(path: &str) -> Result<(), String> {
+/// 资源管理器要打开的目标：目录直接进入，文件定位到所在目录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExplorerTarget {
+    /// 直接打开该目录（进入其中）。
+    Directory(String),
+    /// 在父目录中选中该文件。
+    Select(String),
+}
+
+/// 解析资源管理器的打开方式；路径不存在时返回错误。
+///
+/// 保持纯函数（不 spawn 进程）：`explorer.exe` 一旦被启动就无法在测试里
+/// 收回，所以「决定传什么参数」这一步必须能单独断言。
+pub fn explorer_target(path: &str) -> Result<ExplorerTarget, String> {
+    let source = Path::new(path);
+    if source.is_dir() {
+        return Ok(ExplorerTarget::Directory(path.to_string()));
+    }
+    if source.exists() {
+        // `/select,` 与路径必须是同一个参数，且逗号后不能有空格。
+        return Ok(ExplorerTarget::Select(format!("/select,{path}")));
+    }
+    Err(format!("路径不存在：{path}"))
+}
+
+/// 在文件资源管理器中**打开该目录并进入**；传入文件时退化为在父目录中选中它。
+///
+/// 注意：`explorer.exe` 成功时的退出码并不可靠（`/select,` 常返回 1），
+/// 因此这里只判定「进程是否启动成功」，不检查退出码，也不等待进程结束——
+/// 等待会让界面卡到资源管理器关闭为止。
+pub fn open_in_explorer(path: &str) -> Result<(), String> {
+    let target = explorer_target(path)?;
+    // 两种情况最终都只是一个参数：目录路径，或 `/select,<文件路径>`。
+    let arg = match target {
+        ExplorerTarget::Directory(p) | ExplorerTarget::Select(p) => p,
+    };
     Command::new("explorer")
-        .arg(format!("/select,{path}"))
+        .arg(arg)
         .spawn()
         .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("打开文件资源管理器失败：{e}"))
 }
 
 #[cfg(test)]
@@ -508,5 +561,41 @@ mod cli_agent_tests {
         );
         assert_eq!(OmpLaunchStyle::parse("direct"), OmpLaunchStyle::Direct);
         assert_eq!(OmpLaunchStyle::parse("unexpected"), OmpLaunchStyle::Direct);
+    }
+}
+
+#[cfg(test)]
+mod explorer_tests {
+    use super::{explorer_target, ExplorerTarget};
+
+    // 这些测试只验证「参数怎么拼」，真实启动 explorer.exe 的行为无法在
+    // 单元测试里回收，因此一律不 spawn 进程。
+
+    #[test]
+    fn directory_path_opens_the_directory_itself() {
+        let root = env!("CARGO_MANIFEST_DIR");
+        assert_eq!(
+            explorer_target(root).unwrap(),
+            ExplorerTarget::Directory(root.to_string())
+        );
+    }
+
+    #[test]
+    fn file_path_is_selected_in_its_parent_directory() {
+        let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+        assert_eq!(
+            explorer_target(manifest).unwrap(),
+            ExplorerTarget::Select(format!("/select,{manifest}"))
+        );
+    }
+
+    #[test]
+    fn missing_path_is_rejected() {
+        let missing = concat!(env!("CARGO_MANIFEST_DIR"), "/.no-such-file-here");
+        let error = explorer_target(missing).expect_err("不存在的路径必须报错");
+        assert!(
+            error.starts_with("路径不存在"),
+            "错误信息要能区分「不存在」与启动失败：{error}"
+        );
     }
 }

@@ -8,7 +8,7 @@ mod folder;
 mod settings;
 
 pub use folder::FolderRecord;
-pub use settings::{AppSettings, CliPaths};
+pub use settings::{AppSettings, CliPaths, DEFAULT_INDEX_REFRESH_MINUTES, INDEX_REFRESH_MINUTES};
 
 #[cfg(test)]
 pub use settings::builtin_presets;

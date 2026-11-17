@@ -1,5 +1,5 @@
 /**
- * 打开方式动作条：VS Code / Codex / Claude / omp / opencode / 资源管理器。
+ * 打开方式动作条：VS Code / Codex / Claude / omp / opencode / 文件资源管理器。
  *
  * 默认只在选中行或悬停行显示，避免列表被图标噪声淹没；
  * 图标沿用各家品牌色，未检测到命令时置灰并给出 title 说明。
@@ -121,8 +121,8 @@ export default function OpenWithBar({
       {onReveal && (
         <button
           type="button"
-          title={text("在资源管理器中显示", "Show in File Explorer")}
-          aria-label={text("在资源管理器中显示", "Show in File Explorer")}
+          title={text("在文件资源管理器中打开", "Open in File Explorer")}
+          aria-label={text("在文件资源管理器中打开", "Open in File Explorer")}
           onClick={onReveal}
           className={`${BASE} text-[var(--text-secondary)] hover:bg-[var(--hover-subtle)] hover:text-[var(--text-primary)]`}
         >

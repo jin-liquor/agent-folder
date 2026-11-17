@@ -1,28 +1,34 @@
 /**
- * 设置分组：一个标题 + 一段说明 + 若干设置行。
+ * 设置分组：一个标题 + 若干设置行。
  *
- * 说明只在组首出现一次，避免每一行都重复同样的提示文字。
+ * 组内不再有常驻说明段——分组含义通过标题的悬停提示给出，
+ * 行内说明同理（见 `SettingRow` 的 `hint`）。
  */
 import type { ReactNode } from "react";
+import Hint from "./Hint";
 
 interface Props {
+  /** 锚点 id，供左侧目录跳转与滚动高亮定位。 */
+  id?: string;
   title: string;
-  desc?: string;
+  /** 分组说明，悬停标题时显示。 */
+  hint?: string;
   children: ReactNode;
 }
 
-export default function SettingSection({ title, desc, children }: Props) {
+export default function SettingSection({ id, title, hint, children }: Props) {
   return (
-    <section className="pt-1 pb-2">
-      <div className="pb-1">
-        <div className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">
-          {title}
-        </div>
-        {desc && (
-          <div className="mt-1 text-[10.5px] leading-relaxed text-[var(--text-secondary)] opacity-80">
-            {desc}
-          </div>
-        )}
+    <section data-section={id} className="pb-6">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <Hint text={hint}>
+          <span
+            className={`text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase ${
+              hint ? "cursor-help" : ""
+            }`}
+          >
+            {title}
+          </span>
+        </Hint>
       </div>
       <div className="divide-y divide-[var(--glass-border)] border-t border-[var(--glass-border)]">
         {children}

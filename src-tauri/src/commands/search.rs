@@ -19,16 +19,41 @@ const SCAN_LIMIT: usize = 60;
 /// 索引查询默认上限。
 const DEFAULT_SEARCH_LIMIT: usize = 40;
 
-/// 后台刷新间隔：10 分钟。
+/// 自动索引的检查节奏：每 20 秒读一次设置，判断是否需要重建。
 ///
-/// 构建本身不阻塞查询（旧快照继续可用），所以这个频率足够便宜；
-/// 真正的新鲜度靠「打开即入库」和手动重建兜底。
-const REFRESH_INTERVAL: Duration = Duration::from_secs(600);
+/// 用「上次尝试时间」而不是「上次成功构建时间」判断间隔：
+/// 构建失败时 `built_at` 不会前进，按成功时间判断会导致每轮都重试、把磁盘打满。
+const AUTO_REFRESH_TICK: Duration = Duration::from_secs(20);
+
+/// 是否该执行一次自动重建（纯函数，便于测试）。
+///
+/// - `scan_enabled`：用户在设置里关闭磁盘搜索时不再自动重建；
+/// - `auto`：自动索引开关；
+/// - `interval_minutes`：设置的间隔，非法值按 `DEFAULT_INDEX_REFRESH_MINUTES` 处理；
+/// - `building`：已有构建在跑时不重复触发；
+/// - `elapsed_ms`：距离上次尝试的毫秒数。
+pub fn should_auto_refresh(
+    scan_enabled: bool,
+    auto: bool,
+    interval_minutes: u32,
+    building: bool,
+    elapsed_ms: i64,
+) -> bool {
+    if !scan_enabled || !auto || building {
+        return false;
+    }
+    let minutes = if crate::model::INDEX_REFRESH_MINUTES.contains(&interval_minutes) {
+        interval_minutes
+    } else {
+        crate::model::DEFAULT_INDEX_REFRESH_MINUTES
+    };
+    elapsed_ms >= i64::from(minutes) * 60_000
+}
 
 /// 启动时装配索引：先同步装载缓存（首屏即可搜索），再决定是否后台重建。
 pub fn bootstrap_index(app: AppHandle) {
     spawn_index_build(app.clone(), false);
-    spawn_refresh_loop(app);
+    spawn_auto_refresh_loop(app);
 }
 
 /// 起一次索引构建。
@@ -109,12 +134,32 @@ pub fn spawn_index_build(app: AppHandle, force: bool) {
     }
 }
 
-/// 周期性后台刷新：索引陈旧或磁盘新增目录时自动追上。
-fn spawn_refresh_loop(app: AppHandle) {
-    let builder = std::thread::Builder::new().name("disk-index-refresh".into());
-    let _ = builder.spawn(move || loop {
-        std::thread::sleep(REFRESH_INTERVAL);
-        spawn_index_build(app.clone(), true);
+/// 设置驱动的后台自动重建：每 [`AUTO_REFRESH_TICK`] 读一次设置，判断是否到期。
+///
+/// 设置在这里现读，用户改完间隔或关掉开关后无需重启即可生效。
+fn spawn_auto_refresh_loop(app: AppHandle) {
+    let builder = std::thread::Builder::new().name("disk-index-auto".into());
+    let _ = builder.spawn(move || {
+        let mut last_attempt = std::time::Instant::now();
+        loop {
+            std::thread::sleep(AUTO_REFRESH_TICK);
+            let (scan_enabled, auto, minutes) = {
+                let store = app.state::<Store>();
+                let data = store.data();
+                (
+                    data.settings.scan_enabled,
+                    data.settings.index_auto_refresh,
+                    data.settings.index_refresh_minutes,
+                )
+            };
+            let building = app.state::<index::IndexStore>().status().building;
+            let elapsed = last_attempt.elapsed().as_millis() as i64;
+            if should_auto_refresh(scan_enabled, auto, minutes, building, elapsed) {
+                // 先记时间再起构建：即便构建很快失败，也不会每轮都重试。
+                last_attempt = std::time::Instant::now();
+                spawn_index_build(app.clone(), true);
+            }
+        }
     });
 }
 
@@ -161,4 +206,53 @@ pub async fn scan_folders(state: State<'_, Store>, query: String) -> Result<Vec<
     tauri::async_runtime::spawn_blocking(move || Ok(scanner::scan(&roots, &query, SCAN_LIMIT)))
         .await
         .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_auto_refresh;
+
+    /// 默认间隔（30 分钟）对应的毫秒数。
+    const DEFAULT_MS: i64 = 30 * 60_000;
+
+    #[test]
+    fn disabled_states_never_refresh() {
+        // 关闭磁盘搜索：无论过了多久都不重建。
+        assert!(!should_auto_refresh(false, true, 30, false, i64::MAX));
+        // 关闭自动索引开关。
+        assert!(!should_auto_refresh(true, false, 30, false, i64::MAX));
+        // 已有构建在跑：不重复触发。
+        assert!(!should_auto_refresh(true, true, 30, true, i64::MAX));
+    }
+
+    #[test]
+    fn interval_boundary_is_inclusive() {
+        assert!(!should_auto_refresh(true, true, 30, false, DEFAULT_MS - 1));
+        assert!(should_auto_refresh(true, true, 30, false, DEFAULT_MS));
+        assert!(should_auto_refresh(true, true, 30, false, DEFAULT_MS + 1));
+    }
+
+    #[test]
+    fn interval_follows_the_configured_value() {
+        // 15 分钟档位比 30 分钟更早触发；24 小时档位要等满一天。
+        assert!(should_auto_refresh(true, true, 15, false, 15 * 60_000));
+        assert!(!should_auto_refresh(true, true, 1440, false, 1439 * 60_000));
+        assert!(should_auto_refresh(true, true, 1440, false, 1440 * 60_000));
+    }
+
+    #[test]
+    fn invalid_interval_falls_back_to_default() {
+        // 0 和 7 都不是合法档位，必须按默认 30 分钟计算，
+        // 而不是退化成「每轮都重建」。
+        for minutes in [0, 7] {
+            assert!(
+                !should_auto_refresh(true, true, minutes, false, DEFAULT_MS - 1),
+                "{minutes} 应按默认 30 分钟计算"
+            );
+            assert!(
+                should_auto_refresh(true, true, minutes, false, DEFAULT_MS),
+                "{minutes} 应按默认 30 分钟计算"
+            );
+        }
+    }
 }

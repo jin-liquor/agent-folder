@@ -1,4 +1,4 @@
-//! 启动相关命令：打开文件夹、资源管理器定位、编辑器与 CLI 探测。
+//! 启动相关命令：打开文件夹、在资源管理器中打开、编辑器与 CLI 探测。
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -114,10 +114,13 @@ pub fn open_cli_agent(
     Ok(command)
 }
 
-/// 在资源管理器中选中文件夹。
+/// 在文件资源管理器中打开该目录（直接进入）。
+///
+/// 传入文件路径时退化为「在父目录中选中它」，避免用户点「打开」却只看到
+/// 文件所在目录而没有定位。
 #[tauri::command]
-pub fn reveal_in_explorer(path: String) -> Result<(), String> {
-    editor::reveal_in_explorer(&path)
+pub fn open_in_explorer(path: String) -> Result<(), String> {
+    editor::open_in_explorer(&path)
 }
 
 #[tauri::command]

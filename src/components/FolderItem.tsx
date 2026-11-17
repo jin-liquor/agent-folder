@@ -2,7 +2,7 @@
  * 一条已保存的文件夹记录行。
  *
  * 行内只保留 6 个高频动作：VS Code / Codex / Claude / omp / opencode / 收藏。
- * 收藏、重命名、颜色、标签、资源管理器、复制路径、移除等低频操作
+ * 收藏、重命名、颜色、标签、文件资源管理器、复制路径、移除等低频操作
  * 统一收进右键菜单（`Shift+F10` 为键盘等价入口）。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -116,7 +116,7 @@ export default function FolderItem({
 
   /** 右键菜单项：低频动作全部收在这里。 */
   const menuEntries: MenuEntry[] = [
-    { id: "reveal", label: text("在资源管理器中显示", "Show in File Explorer"), icon: <RevealIcon size={12} /> },
+    { id: "reveal", label: text("在文件资源管理器中打开", "Open in File Explorer"), icon: <RevealIcon size={12} /> },
     { id: "copy", label: text("复制路径", "Copy path"), icon: <CopyIcon size={12} /> },
     { sep: true },
     {

@@ -27,7 +27,10 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 - Stay in the system tray and use global shortcuts; both the main-window and quick-launch hotkeys are configurable, and clearing the quick-launch one disables it
 - Switch the interface between Chinese and English, including settings, quick launch, notices, and tray labels
 - Configure executable paths for Codex, Claude Code, omp, and opencode with detection, validation, and manual overrides
-- Row actions stay at six high-frequency buttons; favorite, rename, color, tags, copy path, reveal, and remove live in a right-click menu (`Shift+F10` works too)
+- Settings is a full page inside the main window (no separate window) with a section list on the left for quick jumps and scroll tracking; explanations appear on hover instead of as permanent captions
+- File Explorer is a first-class default editor: opening a folder jumps straight into that folder instead of selecting it in its parent directory
+- Scheduled disk indexing with a configurable interval (15 minutes to 24 hours), plus manual rebuild and live progress
+- Row actions stay at six high-frequency buttons; favorite, rename, color, tags, copy path, open in File Explorer, and remove live in a right-click menu (`Shift+F10` works too)
 - The palette closes on `Esc`, when it loses focus, or after eight seconds without input
 - Import and export local JSON data; history is capped at 500 records while favorites are preserved
 - Storage safety: a damaged `data.json` is backed up before anything else happens, and a read-only protection mode prevents silent overwrites when the backup itself fails
@@ -36,7 +39,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The latest release is **v1.2.3**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
+The source in this repository is version **v1.3.0**; the latest published release is **v1.2.3**. Download builds from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
 
 ## Installation
 

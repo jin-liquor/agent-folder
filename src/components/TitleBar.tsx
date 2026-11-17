@@ -8,7 +8,14 @@ import appMark from "../assets/app-mark.png";
 import { CloseIcon, MinimizeIcon, SettingsIcon } from "./Icons";
 import TitleBarButton from "./ui/TitleBarButton";
 
-export default function TitleBar({ onOpenSettings }: { onOpenSettings: () => void }) {
+export default function TitleBar({
+  onOpenSettings,
+  settingsOpen = false,
+}: {
+  onOpenSettings: () => void;
+  /** 设置页打开时隐藏设置按钮：页面自己带返回入口，避免两个入口语义冲突。 */
+  settingsOpen?: boolean;
+}) {
   const { settings, saveSettings } = useAppStore();
   const language = settings.language;
   const switchLanguage = () => {
@@ -46,9 +53,11 @@ export default function TitleBar({ onOpenSettings }: { onOpenSettings: () => voi
         >
           {language === "zh-CN" ? "EN" : "中"}
         </button>
-        <TitleBarButton label={t(language, "settings")} onClick={onOpenSettings}>
-          <SettingsIcon size={15} />
-        </TitleBarButton>
+        {!settingsOpen && (
+          <TitleBarButton label={t(language, "settings")} onClick={onOpenSettings}>
+            <SettingsIcon size={15} />
+          </TitleBarButton>
+        )}
         <TitleBarButton label={t(language, "minimize")} onClick={() => void system.minimizeWindow()}>
           <MinimizeIcon size={15} />
         </TitleBarButton>

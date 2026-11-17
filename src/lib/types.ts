@@ -57,10 +57,15 @@ export interface IndexSearchResult {
 /** 支持的 CLI 工具标识。 */
 export type CliAgentId = "codex" | "claude" | "omp" | "opencode";
 
-/** 快速启动浮窗中按 Enter 的默认动作。 */
+/**
+ * 快速启动浮窗中按 Enter 的默认动作。
+ *
+ * `explorer` 表示用文件资源管理器打开（直接进入该目录）。
+ */
 export type QuickEnterAction =
   | "defaultEditor"
   | "vscode"
+  | "explorer"
   | "codex"
   | "claude"
   | "omp"
@@ -119,6 +124,10 @@ export interface AppSettings {
   trustFolders: boolean;
   searchRoots: string[];
   scanEnabled: boolean;
+  /** 是否按固定间隔自动重建磁盘索引。 */
+  indexAutoRefresh: boolean;
+  /** 自动重建间隔（分钟），取值限于 `INDEX_REFRESH_MINUTES`。 */
+  indexRefreshMinutes: number;
   editorPathOverride?: string | null;
   /** 各 CLI 当前选中的预设 id。 */
   codexMode: string;
@@ -266,6 +275,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   trustFolders: false,
   searchRoots: [],
   scanEnabled: true,
+  indexAutoRefresh: true,
+  indexRefreshMinutes: 30,
   editorPathOverride: null,
   codexMode: "default",
   claudeMode: "default",
@@ -282,3 +293,43 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quickOpenWith: true,
   quickHotkey: DEFAULT_QUICK_HOTKEY,
 };
+
+/**
+ * 「用文件资源管理器打开」的伪编辑器 id，与 Rust `EXPLORER_EDITOR_ID` 一致。
+ *
+ * 它不需要探测可执行文件：后端识别到该 id 时直接调用 `explorer.exe`，
+ * 打开目标目录并进入。
+ */
+export const EXPLORER_EDITOR_ID = "explorer";
+
+/** 自动索引可选的间隔（分钟），与 Rust `INDEX_REFRESH_MINUTES` 保持一致。 */
+export const INDEX_REFRESH_MINUTES: readonly number[] = [15, 30, 60, 120, 360, 1440];
+
+/** 默认自动索引间隔（分钟），与 Rust `DEFAULT_INDEX_REFRESH_MINUTES` 保持一致。 */
+export const DEFAULT_INDEX_REFRESH_MINUTES = 30;
+
+/** 把越界的间隔恢复成默认值，保证下拉框永远有选中项。 */
+export function normalizeIndexRefreshMinutes(value: number | undefined): number {
+  return INDEX_REFRESH_MINUTES.includes(Number(value))
+    ? Number(value)
+    : DEFAULT_INDEX_REFRESH_MINUTES;
+}
+
+/** 编辑器的本地化名称；后端只提供英文名，中文界面在这里补齐。 */
+export const EDITOR_LABELS: Record<string, { zh: string; en: string }> = {
+  explorer: { zh: "文件资源管理器", en: "File Explorer" },
+  vscode: { zh: "Visual Studio Code", en: "Visual Studio Code" },
+  "vscode-insiders": { zh: "VS Code Insiders", en: "VS Code Insiders" },
+  cursor: { zh: "Cursor", en: "Cursor" },
+  windsurf: { zh: "Windsurf", en: "Windsurf" },
+};
+
+/** 间隔的本地化标签。 */
+export function indexIntervalLabel(minutes: number, english: boolean): string {
+  if (minutes >= 1440) return english ? "24 hours" : "24 小时";
+  if (minutes >= 60) {
+    const hours = minutes / 60;
+    return english ? `${hours} hours` : `${hours} 小时`;
+  }
+  return english ? `${minutes} minutes` : `${minutes} 分钟`;
+}

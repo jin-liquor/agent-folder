@@ -52,7 +52,7 @@ export default function StorageNotice({ status, onChanged, language }: Props) {
   const revealBackup = () => {
     const backupPath = status.backupPath;
     if (!backupPath) return;
-    void run(text("定位备份", "Locate backup"), () => commands.revealInExplorer(backupPath));
+    void run(text("定位备份", "Locate backup"), () => commands.openInExplorer(backupPath));
   };
 
   const exportBackup = () => {
