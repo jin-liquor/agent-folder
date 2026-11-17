@@ -14,6 +14,10 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ![Quick launch](docs/quick-launch.png)
 
+**Settings** — a full page inside the main window instead of a separate window: pick a group on the left and hover any label for its explanation.
+
+![Settings](docs/settings.png)
+
 ## Features
 
 - Pin favorite folders and sort by recent usage
@@ -39,7 +43,7 @@ Agent Folder is a lightweight Windows desktop app for organizing frequently used
 
 ## Current Version
 
-The source in this repository is version **v1.3.0**; the latest published release is **v1.2.3**. Download builds from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
+The latest release is **v1.3.0**. Download it from [GitHub Releases](https://github.com/jin-liquor/agent-folder/releases).
 
 ## Installation
 
@@ -54,7 +58,7 @@ Requirements: Windows 10 or later and the Microsoft Edge WebView2 Runtime (usual
 3. Select a project and press `Enter` to open it with the current default editor.
 4. Favorite frequently used folders and search them later from the main window or quick-launch palette.
 
-If a project is outside the default scan roots, add its parent directory in **Settings → Scan Roots**. Adding records, favorites, or settings never moves, modifies, or deletes project files on disk.
+If a project is outside the default scan roots, add its parent directory in **Settings → Disk index → Scan roots**. Adding records, favorites, or settings never moves, modifies, or deletes project files on disk.
 
 ## Shortcuts
 
@@ -66,12 +70,14 @@ If a project is outside the default scan roots, add its parent directory in **Se
 | `Ctrl+D` | Toggle favorite |
 | `Delete` | Remove a record without deleting its folder |
 | `Ctrl+,` | Open settings |
-| `Esc` | Close a panel or clear search |
+| `Esc` | Back to the list (in settings) or clear search |
 | `Ctrl+Alt+V` | Show or hide the main window; configurable in settings |
 | `Ctrl+Space` | Show or hide the quick-launch palette; changeable in settings, clear it to disable |
 | `Shift+F10` / right-click | Open the action menu for the focused row |
 
 Inside the palette only `↑` / `↓` and `Enter` are bound; switch the launch target with the icon buttons on the right of each row.
+
+Settings opens as a page inside the main window: the left-hand list jumps between groups and highlights the group you are scrolled to, and hovering any label shows its explanation.
 
 The title-bar minimize button minimizes the app to the taskbar. The close button follows the **Close to tray on close** setting. To exit completely, right-click the tray icon and choose **Quit**.
 
@@ -79,7 +85,7 @@ The title-bar minimize button minimizes the app to the taskbar. The close button
 
 Folder records and settings are stored locally at `%APPDATA%\agent-folder\data.json`. The app does not upload this data or collect usage analytics. JSON import and export are user-initiated. Automatic updates are not currently included; download and install new versions manually from GitHub Releases.
 
-If `data.json` cannot be parsed, the app backs up the original file next to it before falling back, and settings shows the backup path together with **Reveal backup**, **Export backup**, **Restore backup**, and **Reload** actions. If creating the backup fails, the app enters read-only protection instead of overwriting your data.
+If `data.json` cannot be parsed, the app backs up the original file next to it before falling back, and settings shows the backup path together with **Locate backup**, **Export backup**, **Restore backup**, and **Reload** actions. If creating the backup fails, the app enters read-only protection instead of overwriting your data.
 
 ## Build from Source
 
